@@ -31,13 +31,18 @@ the prefix. GUI casks must target `$HOME/Applications`.
 
 ### Packages in use
 
-**Homebrew formulae (24):** `actionlint`, `beads`, `colima`, `docker`,
+**Homebrew formulae (25):** `actionlint`, `beads`, `colima`, `docker`,
 `docker-buildx`, `docker-compose`, `fd`, `gh`, `git-filter-repo`, `go`,
 `graphviz`, `hey`, `htop`, `midnight-commander`, `mkcert`, `neovim`, `nvm`,
 `pandoc`, `poppler`, `python@3.14`, `ripgrep`, `rtk`, `tree`, `watch`, `whistle`
 
 `ripgrep` and `fd` were added on 2026-09-17 as hard dependencies of the Neovim
 picker. Snacks `grep` has no search backend without `ripgrep`.
+
+The count above is the `brew leaves` set, verified to match this list exactly in
+both directions on 2026-09-17. It was previously recorded as 24 while listing 25
+entries; corrected. `brew list --formula` returns 134 entries, the full dependency
+closure, and is not what `packages.yaml` should declare.
 
 **Homebrew casks (2):** `font-jetbrains-mono-nerd-font`, `opensuperwhisper`
 
@@ -142,6 +147,16 @@ directory, which is why `~/.config/nvim` can be symlinked wholesale.
 6. **Hidden cross-repo dependency.** `settings.json` registers a plugin
    marketplace at `<home>/projects/bdk`, a local directory. The `bdk` repo must be
    cloned there or the plugin fails to load. Phase 5 makes this explicit.
+7. **`shellcheck` is present by accident.** `CLAUDE.md` requires every script to
+   pass it and phase 6 runs it in CI, but `brew uses --installed shellcheck`
+   reports `actionlint` as its only dependent and its install receipt says
+   `"installed_on_request": false`. It is not a leaf, so a `brew leaves`-derived
+   `packages.yaml` would omit it, and removing `actionlint` would silently remove
+   the repository's own lint gate. Declare it explicitly in phase 1.
+8. **Scripts must target bash 3.2.** macOS ships `/bin/bash` 3.2.57 and Homebrew
+   `bash` is not installed. `mapfile`, associative arrays and `${arr[@]}` over an
+   empty array under `set -u` are all unavailable. Found by `scripts/check.sh`
+   failing with `mapfile: command not found` on its first run.
 
 ---
 
@@ -157,6 +172,11 @@ directory, which is why `~/.config/nvim` can be symlinked wholesale.
       group membership; abort otherwise
 - [ ] Run `chezmoi init --source ~/projects/dotfiles` and confirm the prompt fires
       exactly once
+- [x] `scripts/check.sh`: mechanical guardrails replacing the rules that used to
+      sit in `CLAUDE.md` as prose. Verified 2026-09-17 in both directions - clean
+      tree exits 0, and a planted script containing `sudo`, `brew bundle
+      --cleanup`, a literal `/Users/<name>` path, a missing `set -euo pipefail` and a
+      `ghp_` token is caught on all five
 
 **Done when:** `chezmoi data` prints the chosen profile and `chezmoi apply` is a
 no-op.
@@ -179,6 +199,9 @@ no-op.
       `uv tool install` each entry
 - [ ] Add WezTerm as a cask and drop the manual `~/Applications/WezTerm.app`
       install, so it becomes managed like everything else
+- [ ] Declare `shellcheck` explicitly (defect 7). It is currently installed only
+      as a dependency of `actionlint`, and the repository's own lint gate depends
+      on it
 
 **Done when:** a second `chezmoi apply` produces no changes and installs nothing.
 
@@ -289,7 +312,12 @@ is the phase most likely to need iteration.
 **Goal:** prove a fresh machine works, without owning a fresh machine.
 
 - [ ] `.github/workflows/test.yml` on `macos-latest`
-- [ ] Job 1: `shellcheck` over every script
+- [ ] Job 1: `./scripts/check.sh`. It already runs locally and in one step covers
+      shellcheck, the `sudo` ban, the `brew bundle` flag ban, absolute home paths,
+      the script prologue and the secret tripwire
+- [ ] Extend Job 1 to shellcheck the `*.sh.tmpl` scripts too, by rendering them
+      with `chezmoi execute-template` first. `check.sh` skips them today and says
+      so in its output
 - [ ] Job 2: `chezmoi apply` into a throwaway `HOME` with `profile=managed`, then
       assert the expected symlinks and files exist
 - [ ] Job 3: same with `profile=owned`, asserting the profile split diverges
@@ -368,3 +396,10 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-17 | Markdown split across two plugins | Formatting and diagram rendering are different problems: `render-markdown` is virtual text and works in any terminal, mermaid must become a picture and needs either a browser or a graphics-capable terminal |
 | 2026-09-17 | `selimacerbas/markdown-preview.nvim` over `iamcco/markdown-preview.nvim` | The iamcco plugin needs a node and yarn build step, exactly the class of thing that breaks fresh-machine bootstrap and the phase 6 CI. Accepted risk: the chosen plugin is young (199 stars) |
 | 2026-09-17 | `nvim-treesitter` not installed | Neovim 0.12 already ships every parser `render-markdown` needs. Adding it would be a dependency with no current purpose |
+| 2026-09-17 | `CLAUDE.md` split three ways: always-loaded invariants, `.claude/rules/*` scoped by path, `scripts/check.sh` for anything mechanical | The file is loaded into every session in this repo and pays its token cost every time. Guidance that only matters while touching one path should load when that path is touched, and a rule a machine can check should not depend on an agent remembering it |
+| 2026-09-17 | Mechanical rules moved from prose into `scripts/check.sh` | A prose rule fails silently when ignored; a gate fails loudly. Covers `sudo`, `brew bundle --cleanup/--force`, absolute home paths, the `set -euo pipefail` prologue, shellcheck and a secret tripwire |
+| 2026-09-17 | Roadmap discipline moved to `.claude/rules/roadmap-discipline.md`, settings.json sync to `.claude/rules/claude-config-sync.md` | Both are real recurring knowledge, but neither is needed in a session that does not touch those files |
+| 2026-09-17 | Facts live in this file only; `CLAUDE.md` carries the rule and a pointer | Sizes and counts decay. `CLAUDE.md` had `1.5 GB`, `5 MB`, `132 B` and an nvm pin duplicated from the survey here, which is two places to update and one to forget |
+| 2026-09-17 | "no agent name as co-author" dropped from this repo's `CLAUDE.md` | It is already in the user-level `~/.claude/CLAUDE.md` and applies everywhere. Restating it here buys nothing and costs tokens in every session |
+| 2026-09-17 | Scripts target bash 3.2, not bash 4 | macOS ships 3.2.57 and Homebrew `bash` is not installed. A bootstrap script that needs a package manager to run cannot bootstrap the package manager |
+| 2026-09-17 | No pre-commit framework; one script invoked by hand and by CI | The direct path has not exposed a blocker yet. Adding a hook manager would be machinery ahead of need |

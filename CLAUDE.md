@@ -2,6 +2,11 @@
 
 Project instructions for agents working in this repository.
 
+This file holds repository facts and the invariants whose violation **fails
+silently**. Everything that only matters while touching one path lives in
+`.claude/rules/`. Everything mechanically checkable lives in `scripts/check.sh`.
+Project state lives in `docs/ROADMAP.md`, and nowhere else.
+
 ## What this repository is
 
 A **toolbox**, not a machine provisioner. It reproduces the set of tools I work
@@ -61,13 +66,16 @@ profile is a failure mode you discover a week later.
    `dsmemberutil checkmembership -U "$(id -un)" -G admin` reports no membership,
    abort. A configuration that lies about its environment is worse than none.
 
+Rules 1 and 2 are enforced by `scripts/check.sh`. Rules 3 and 4 are not
+mechanically checkable and are on you.
+
 ## Hard rules
 
 ### Never version a directory that contains runtime state
 
-`~/.claude` holds roughly 1.5 GB of runtime data (`projects/`, `jobs/`,
-`file-history/`, `history.jsonl`, `plugins/cache/`) alongside about eight authored
-files. `~/.config/herdr` holds a 5 MB server log next to a 132-byte config.
+`~/.claude` and `~/.config/herdr` each hold orders of magnitude more runtime data
+than authored files. The surveyed sizes are in `docs/ROADMAP.md`, under
+"Runtime state, never versioned".
 
 **Always whitelist individual files.** Never add a whole directory unless you have
 verified every path under it is authored.
@@ -78,8 +86,7 @@ state in `stdpath("data")`, not in the config directory.
 ### Never hardcode an absolute home path
 
 Two usernames exist across the two machines. Use `$HOME` in shell and
-`{{ .chezmoi.homeDir }}` in templates. A literal `/Users/<name>` anywhere in this
-repo is a bug.
+`{{ .chezmoi.homeDir }}` in templates. Enforced by `scripts/check.sh`.
 
 ### One source of truth for packages
 
@@ -87,42 +94,31 @@ All package lists live in `home/.chezmoidata/packages.yaml`, keyed by channel an
 profile. Scripts consume that file and contain no package names of their own.
 Adding a tool is a one-line YAML change, never a shell edit.
 
+A tool the repository depends on must be declared there even when it is already
+present on this machine as some other formula's dependency. Transitive presence
+disappears the moment the parent does.
+
 ### Scripts are idempotent
 
 Every `run_onchange_` and `run_once_` script must survive being run ten times.
 Start with `set -euo pipefail`. Guard every source and every install.
-All scripts must pass `shellcheck`.
+Both the prologue and `shellcheck` are enforced by `scripts/check.sh`.
 
 ## File handling policy
 
 Two categories, decided by **who writes the file**:
 
 **Symlink into the repo** when the application rewrites the file and you want
-those edits to land in git:
+those edits to land in git: `~/.config/nvim/`, `~/.config/wezterm/`,
+`~/.config/herdr/config.toml`. Real files live under `live/`; chezmoi creates the
+symlink, and edits made in either place are the same bytes.
 
-- `~/.config/nvim/` (Neovim and lazy.nvim rewrite `lazy-lock.json`)
-- `~/.config/wezterm/`
-- `~/.config/herdr/config.toml`
+**chezmoi-managed file or template** when only a human writes it: `~/.zshrc`,
+`~/.zprofile`, `~/.gitconfig`, `~/.claude/CLAUDE.md`, `~/.claude/RTK.md`,
+`~/.claude/hooks/herdr-agent-state.sh`.
 
-Real files live under `live/` in this repo. chezmoi creates the symlink; edits
-made in either place are the same bytes.
-
-**chezmoi-managed file or template** when only a human writes it:
-
-- `~/.zshrc`, `~/.zprofile`, `~/.gitconfig`
-- `~/.claude/CLAUDE.md`, `~/.claude/RTK.md`
-- `~/.claude/hooks/herdr-agent-state.sh`
-
-**Special case: `~/.claude/settings.json`.** Claude Code rewrites it, and it
-contains two `$HOME`-relative absolute paths, so it must be a template. The
-accepted workflow after changing settings through the UI is:
-
-```sh
-chezmoi re-add --force ~/.claude/settings.json
-git diff            # re-check that the two templated paths survived
-```
-
-Do not build automation around this. Two commands is cheaper than a sync layer.
+`~/.claude/settings.json` is the one file that fits neither: Claude Code rewrites
+it, and it needs two templated paths. See `.claude/rules/claude-config-sync.md`.
 
 ## Install channels
 
@@ -133,50 +129,30 @@ into one; each owns a distinct class of tool.
 |---|---|---|
 | Homebrew | CLI tools, GUI casks | `Brewfile` generated from `packages.yaml` |
 | mise | language runtimes (node, python, go, bun) | replaces nvm |
-| npm global | `*-axi` CLI tools | currently pinned under an nvm node version |
+| npm global | `*-axi` CLI tools | migration to mise is roadmap phase 7 |
 | uv tools | `code-review-graph` | `uv` itself is a standalone binary |
 
 Project-scoped dependencies belong to the project, never here.
 
 ## Verification
 
-Before proposing a change as done:
+Match the check to what changed.
 
 ```sh
+./scripts/check.sh            # always; the mechanical rules above
 chezmoi diff                  # review every byte that would change on disk
 chezmoi apply --dry-run -v
-shellcheck home/**/*.sh
 ```
 
-CI runs a clean `chezmoi apply` on `macos-latest`. A change that cannot be applied
-to a fresh machine is not finished.
+CI runs `scripts/check.sh` and a clean `chezmoi apply` on `macos-latest`. A change
+that cannot be applied to a fresh machine is not finished.
 
-Do not run the full verification suite after editing documentation only.
-
-## Keeping the roadmap honest
-
-`docs/ROADMAP.md` is the working state of this project, not a proposal written
-once. Every change to the repository updates it in the **same commit** as the work.
-
-1. **Tick a checkbox only after its verification passed.** `[x]` means the phase's
-   "Done when" criterion was actually run and observed, not that the code was
-   written. Use `[~]` for started-but-unverified. A plan that claims more than the
-   repository delivers is worse than no plan.
-2. **Never mark a phase complete while any of its boxes are open.**
-3. **Correct "Current state" when you learn it is wrong.** It is a factual survey
-   with real sizes, paths and counts. Stale facts there cause bad decisions three
-   phases later. Say plainly in the commit message that a fact was corrected.
-4. **Append to the decisions log whenever a choice is made**, including choices to
-   say no, and record the rationale, not just the outcome.
-5. **Move an item from "Open questions" to the decisions log when it is settled**,
-   rather than deleting it. The trail is the point.
-
-Do not add status tracking anywhere else. One file, one truth.
+Documentation-only edits need `scripts/check.sh` and nothing else.
 
 ## Conventions
 
 - Documentation language: technical English, imperative mood, explicit instructions
-- Commit messages: Conventional Commits, no agent name as co-author
+- Commit messages: Conventional Commits
 - Repository visibility: **private**. It lists the tooling of an MDM-managed work
   machine. There are no secrets in it, but that is not a reason to publish it.
 - Record every scope decision in `docs/ROADMAP.md`, including decisions to say no
