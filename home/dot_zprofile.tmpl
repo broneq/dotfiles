@@ -1,0 +1,21 @@
+# Login shell configuration.
+#
+# The single entry point for Homebrew's PATH, prefix and environment. Anything
+# that reads $HOMEBREW_PREFIX (see .zshrc) depends on this having run first.
+#
+# /opt/homebrew is the Apple-silicon prefix and is owned by the login user on both
+# machines, which is why formulae install without sudo even on `managed`.
+
+for brew_bin in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+	if [ -x "$brew_bin" ]; then
+		eval "$("$brew_bin" shellenv)"
+		break
+	fi
+done
+unset brew_bin
+
+# JetBrains Toolbox writes its launcher scripts here. Guarded: the directory does
+# not exist until Toolbox has been installed and opened at least once.
+toolbox_scripts="{{ .chezmoi.homeDir }}/Library/Application Support/JetBrains/Toolbox/scripts"
+[ -d "$toolbox_scripts" ] && export PATH="$PATH:$toolbox_scripts"
+unset toolbox_scripts

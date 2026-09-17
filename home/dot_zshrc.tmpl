@@ -1,0 +1,35 @@
+# Interactive shell configuration.
+#
+# Rule for this file: it must start cleanly on a machine where nothing is
+# installed yet. Every source is guarded by an existence test, and no absolute
+# home path is written out - two usernames exist across the two machines.
+#
+# Homebrew's PATH is set exactly once, by `brew shellenv` in .zprofile. Setting it
+# here as well was a duplicate that silently reordered PATH on every new shell.
+
+export PATH="$HOME/.local/bin:$PATH"
+
+# uv writes this file when it bootstraps itself. Unguarded, it aborts the whole
+# shell on a machine where uv has not been installed yet.
+[ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
+
+# bun: required by the Claude Code status line (`bunx -y ccstatusline@latest`).
+# Declared in packages.yaml; ~/.bun survives from the pre-Homebrew install.
+export BUN_INSTALL="$HOME/.bun"
+[ -d "$BUN_INSTALL/bin" ] && export PATH="$BUN_INSTALL/bin:$PATH"
+[ -s "$BUN_INSTALL/_bun" ] && . "$BUN_INSTALL/_bun"
+
+# nvm. Roadmap phase 7 replaces this with mise; until then the five *-axi tools
+# resolve from here and this block is load-bearing.
+export NVM_DIR="$HOME/.nvm"
+if [ -n "${HOMEBREW_PREFIX:-}" ]; then
+	[ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && . "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
+	[ -s "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm" ] && . "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm"
+fi
+
+# atuin: shell history. The env file exists only after a standalone install; the
+# Homebrew formula puts the binary on PATH instead, so test for both.
+[ -f "$HOME/.atuin/bin/env" ] && . "$HOME/.atuin/bin/env"
+command -v atuin >/dev/null 2>&1 && eval "$(atuin init zsh --disable-up-arrow)"
+
+alias ccs='claude --dangerously-skip-permissions'
