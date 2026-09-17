@@ -5,10 +5,21 @@ work Mac with no admin rights; `owned` is the personal Mac with root.
 promptChoiceOnce asks exactly once, at `chezmoi init`, and stores the answer in
 ~/.config/chezmoi/chezmoi.toml. It is never re-derived from the hostname: Macs get
 renamed, and a silently switched profile is a failure mode you discover a week later.
+
+The prompt text below is also the lookup key for `--promptChoice`, which is how CI
+answers this question without a TTY. That flag takes comma-separated `key=value`
+pairs, so a prompt containing a comma or an `=` cannot be matched and the prompt
+fires anyway - returning the prompt string itself as the answer, silently. Keep the
+text short and free of both characters; the long explanation lives in README.md.
 */ -}}
-{{- $profile := promptChoiceOnce . "profile"
-    "Machine profile (managed = MDM, no admin rights / owned = personal, admin)"
-    (list "managed" "owned") -}}
+{{- $profile := promptChoiceOnce . "profile" "Machine profile" (list "managed" "owned") -}}
+
+{{/*
+`chezmoi init --source DIR` does not persist DIR anywhere. Without the line below, a
+later bare `chezmoi apply` falls back to ~/.local/share/chezmoi, finds nothing there
+and silently applies nothing. Record the directory init actually used.
+*/ -}}
+sourceDir = {{ .chezmoi.sourceDir | quote }}
 
 [data]
     profile = {{ $profile | quote }}

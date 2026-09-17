@@ -10,8 +10,13 @@ set -euo pipefail
 # herdr is the exception: it ships a script and tracks its own version, which is
 # precisely why versioning a copy of that script here was the wrong move.
 #
-# All five are idempotent. Re-running reinstalls the current version, which is
-# also how a tool upgrade gets its new hook.
+# This is `run_after_`, not `run_onchange_after_`, and that is deliberate. A
+# run_onchange_ script re-runs only when its own rendered text changes, and this
+# script's text depends on nothing: it would execute exactly once in the lifetime
+# of a machine. A tool installed later would never get its hook, and a tool that
+# upgraded would keep serving the hook version it shipped with on day one. All
+# five installers are idempotent and cheap, so running them on every apply is both
+# safe and the only form that actually tracks the tools.
 install_hook() {
 	local tool="$1"
 	shift

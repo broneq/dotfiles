@@ -9,11 +9,15 @@ last.
 
 Status legend: `[ ]` not started, `[~]` in progress, `[x]` done.
 
-`[~]` is the honest state for everything written on 2026-09-17: the source files
-exist and are committed, but **nothing has been executed on any machine**. No
-`chezmoi init`, no `chezmoi apply`, no `brew install`. Verification happens on a
-dedicated test account, and the boxes stay `[~]` until each "Done when" has
-actually been observed there.
+`[~]` is the honest state for everything written on 2026-09-17. Corrected the same
+day: the tree has now been executed, but only partially and only against throwaway
+destinations. `chezmoi` was installed on the `managed` machine and `chezmoi init`
+plus `chezmoi apply --exclude=scripts` were run into temporary directories under
+both profiles, which is what found the defects listed under "Defects found by the
+first execution". **No install script has ever run**: no `brew bundle`, no npm
+globals, no uv tools, no skill clone, no hook installer. The real machine has had
+nothing applied to it. Verification still happens on a dedicated test account, and
+the boxes stay `[~]` until each "Done when" has actually been observed there.
 
 ---
 
@@ -197,12 +201,56 @@ directory, which is why `~/.config/nvim` can be symlinked wholesale.
    is 13, not 15, and the two are documented as manual in `README.md`.
 9. **The lock file keys are display names, not directory names.** `"Agent
    Development"` corresponds to the directory `agent-development`. A restore script
-   that trusts the key produces `~/.agents/skills/Agent Development`. Take the
-   directory from `basename(dirname(skillPath))`.
+   that trusts the key verbatim produces `~/.agents/skills/Agent Development`.
+   Corrected 2026-09-17: the fix is to *slugify* the key, not to abandon it. Taking
+   the directory from `basename(dirname(skillPath))` was the first fix and was
+   wrong in one case out of thirteen - see defect 13.
 10. **Scripts must target bash 3.2.** macOS ships `/bin/bash` 3.2.57 and Homebrew
    `bash` is not installed. `mapfile`, associative arrays and `${arr[@]}` over an
    empty array under `set -u` are all unavailable. Found by `scripts/check.sh`
    failing with `mapfile: command not found` on its first run.
+
+### Defects found by the first execution
+
+Surveyed 2026-09-17 by installing `chezmoi` and running `init` and `apply` into
+throwaway destinations for the first time. These are defects in this repository,
+not in the machine it describes, and every one of them failed **silently**: nothing
+errored, nothing was red, and the output looked plausible. All five are fixed.
+
+11. **`--promptChoice` is keyed on the prompt text, not on the field it fills.**
+   `--promptChoice "profile=managed"` against
+   `promptChoiceOnce . "profile" "<text>" …` does not error. The prompt fires, and
+   with no TTY the template receives the literal prompt string as the profile.
+   Every `eq .profile` branch then goes false and the render still looks sane. The
+   flag also takes comma-separated `key=value` pairs, so the original prompt text
+   (which contained both a comma and an `=`) could not have been matched under any
+   key. All three call sites in CI were affected, so **CI could never have passed**
+   - which went unnoticed because the repository has no remote yet and CI has never
+   run. Fix: prompt text shortened to `Machine profile`, CI keyed on that string,
+   and an assertion added that greps the generated config for the profile it asked
+   for.
+12. **`chezmoi init --source DIR` does not persist DIR.** The generated config
+   held `[data]` and nothing else, so the `chezmoi apply` that README tells you to
+   run next resolved its source to `~/.local/share/chezmoi`, found an empty
+   directory, and applied nothing. Fix: `.chezmoi.toml.tmpl` writes `sourceDir`
+   itself, and the CI apply job runs a bare `apply` with no `--source` to keep it
+   honest.
+13. **The skill directory name derived from the path renames one skill.**
+   `basename(dirname(skillPath))` and the slugified lock file key agree for twelve
+   of the thirteen skills. `"Writing Hookify Rules"` lives upstream at
+   `plugins/hookify/skills/writing-rules/`, so the path-derived restore installs it
+   as `writing-rules`. Fix: slugify the key at template time; CI asserts this one
+   case by name.
+14. **`run_onchange_` on a script whose text depends on no data runs once, ever.**
+   `60-agent-hooks` templated nothing into itself, so its rendered text was
+   constant and chezmoi would have executed it exactly once per machine - despite a
+   comment in the script claiming the opposite. A tool installed later would never
+   get its hook; a tool that upgraded would keep the hook it shipped with. Fix:
+   plain `run_after_`, since all five installers are idempotent.
+15. **`execute-template --init` supplies neither `[data]` nor `.chezmoidata`.** It
+   only makes the `prompt*` functions callable. Every `.profile` and `.packages`
+   reference under it errors, which is what the CI lint step was built on. Fix: CI
+   generates a real config with `init --config-path` and renders with `--config`.
 
 ---
 
@@ -216,14 +264,23 @@ directory, which is why `~/.config/nvim` can be symlinked wholesale.
 - [x] `git init`, add `.gitignore` covering `live/**/*.log`, `live/**/*.sock`, `.DS_Store`
 - [~] Create `.chezmoiroot` containing `home`
 - [~] Create `home/.chezmoi.toml.tmpl` with `promptChoiceOnce` over
-      `managed` / `owned`, stored as `.profile`
+      `managed` / `owned`, stored as `.profile`. The prompt text is `Machine
+      profile` and must stay short and free of `,` and `=`: it doubles as the
+      lookup key for `--promptChoice`, which is how CI answers it (defect 11)
+- [~] Have the same template record `sourceDir`. `chezmoi init --source` does not
+      persist it, and without it a later bare `chezmoi apply` applies nothing
+      (defect 12)
 - [~] Add a profile-vs-reality assertion: if `.profile` is `owned`, require admin
       group membership; abort otherwise. Lives in
       `run_once_before_00-assert-profile.sh.tmpl`, not in `.chezmoi.toml.tmpl`:
       the config template is evaluated once at `init`, the assertion must run on
       every apply
-- [ ] Run `chezmoi init --source ~/projects/dotfiles` and confirm the prompt fires
-      exactly once
+- [ ] Run `chezmoi init --source ~/projects/dotfiles` on a real machine and confirm
+      the prompt fires exactly once. Partially done 2026-09-17: verified
+      non-interactively into a throwaway destination under both profiles, with the
+      generated config carrying both the answer and `sourceDir`, and a bare
+      `chezmoi apply` afterwards finding the source tree. Never run against a real
+      `$HOME`
 - [x] `scripts/check.sh`: mechanical guardrails replacing the rules that used to
       sit in `CLAUDE.md` as prose. Verified 2026-09-17 in both directions - clean
       tree exits 0, and a planted script containing `sudo`, `brew bundle
@@ -282,8 +339,9 @@ stay editable in place.
       `hooks` belongs to five installed tools and `autoMode` to Claude Code.
       Only one templated path remains, the `bdk` marketplace
 - [~] Install agent hooks through each tool's own installer
-      (`run_onchange_after_60-agent-hooks.sh.tmpl`) instead of versioning a copy of
-      herdr's script
+      (`run_after_60-agent-hooks.sh.tmpl`) instead of versioning a copy of herdr's
+      script. Plain `run_`, not `run_onchange_`: see defect 14. All five install
+      commands were checked against the tools' own `--help` on 2026-09-17
 - [~] Write the first WezTerm config in `live/wezterm/wezterm.lua`: JetBrains Mono
       Nerd Font, theme, sensible keybindings
 - [~] Delete `~/.claude/statusline-command.sh` - declaratively, via
@@ -366,19 +424,24 @@ in both directions.
 - [~] Write `run_onchange_after_50-claude-skills.sh.tmpl`: for each entry in the
       lock file, clone `sourceUrl` once per repository and copy `skillPath`'s
       folder into `~/.agents/skills/<folder>`, then symlink into `~/.claude/skills`.
-      The folder name comes from `basename(dirname(skillPath))`, never from the
-      lock file key (defect 9). The list is expanded at template time with
+      The folder name is the slugified lock file key, expanded at template time
+      (defects 9 and 13). The list is expanded at template time with
       `include … | fromJson`, which removes a runtime `jq` dependency and makes
       `run_onchange` fire on any lock file change
 - [~] Make the `bdk` cross-repo dependency explicit: clone
-      `<home>/projects/bdk` if missing, or fail with a clear message naming SSH as
-      the likely cause
+      `<home>/projects/bdk` if missing, over **HTTPS**, or fail with a clear
+      message. The repository is public, and an SSH remote made a GitHub key an
+      undeclared prerequisite of `chezmoi apply` - which matters doubly because
+      this script's failure aborts the apply before the hooks script runs
 - [ ] Confirm plugins restore from `settings.json` alone
       (`enabledPlugins` + `extraKnownMarketplaces`), with no need to reproduce
       `installed_plugins.json` or the plugin cache
 
 **Done when:** deleting `~/.agents/skills` and running `chezmoi apply` restores
-**13** skills. Corrected 2026-09-17 from 15: see defect 8. The remaining two have
+**13** skills, under the names they have today. Verified 2026-09-17 by rendering
+only: all thirteen `sourceUrl` + `skillPath` pairs resolve upstream (checked
+through the GitHub contents API) and the thirteen rendered folder names match the
+directories on disk exactly. The script itself has still never been executed. Corrected 2026-09-17 from 15: see defect 8. The remaining two have
 no source to restore from and are documented as manual in `README.md`.
 
 **Note:** there is no `skills` CLI on this machine. The lock file is written by an
@@ -405,8 +468,24 @@ is the phase most likely to need iteration.
 - [~] Do not install the full package set in CI; assert the rendered Brewfile
       instead, via `--exclude=scripts`. Installing 29 formulae per run buys little
       and costs minutes
+- [~] Rewritten 2026-09-17 after the first local execution. As authored, **no job
+      in this workflow could have passed**: all three `--promptChoice` call sites
+      used the wrong key (defect 11), the lint job rendered with
+      `execute-template --init`, which supplies no data at all (defect 15), `init`
+      wrote its config into the runner's real `HOME` rather than the throwaway one
+      because `--config-path` was missing, and the `bdk` marketplace assertion
+      compared against `$FAKE_HOME` although `.chezmoi.homeDir` does not follow
+      `--destination`
+- [~] Add assertions for the two defects that produce a plausible-looking result:
+      that the profile prompt was actually answered, and that `init` recorded
+      `sourceDir`
+- [~] Add an assertion that the skill restore keeps `writing-hookify-rules` under
+      that name and clones `bdk` over HTTPS (defect 13)
 
-**Done when:** CI is green and a deliberately broken template turns it red.
+**Done when:** CI is green on GitHub and a deliberately broken template turns it
+red. Both jobs were simulated locally on 2026-09-17 under both profiles and pass;
+that is not the same as green on `macos-latest`, and the repository still has no
+remote.
 
 ---
 
@@ -450,6 +529,11 @@ half the toolbox. The ordering above exists precisely to prevent that.
       `~/.local/bin` with no declared installer. Find their upstream install
       method, or accept them as a documented manual step. `atuin` and `bun` were in
       the same category and are now Homebrew formulae; these three are what is left.
+      **herdr is the one that costs something today:** this repository symlinks its
+      config, installs its hook and restores its skill, but installs nothing. On a
+      fresh machine `run_after_60` prints `herdr is not installed, skipping` and
+      moves on. `claude` itself is in the same position - the whole agent layer is
+      configured for a binary no channel installs.
 - [ ] `create-tasks-workspace` and `no-mistakes` have no entry in
       `.skill-lock.json` (defect 8). Find their source, accept them as manual, or
       drop them. Documented as manual for now, which is the honest state rather
@@ -503,3 +587,7 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-17 | `autoMode` deliberately not versioned | Claude Code generates it per project. It named a client organisation, its private repository, its services, its protected branches and the environment variables holding its secrets. That is neither toolbox configuration nor this repository's to publish, and it goes stale the moment the project changes |
 | 2026-09-17 | History rewritten before the first push to remove `settings.json.tmpl` | The repository had no remote yet, so nothing had been published and the rewrite cost nothing. Purging a blob after a push is a different and much worse problem |
 | 2026-09-17 | Phases 0-6 authored without executing anything | Verification will happen on a dedicated test account, so no run on the work machine can be trusted as a fresh-machine test anyway. Checkboxes stay `[~]` until that account has run each "Done when" |
+| 2026-09-17 | The `bdk` marketplace is cloned over HTTPS, not SSH | The repository is public, so the SSH remote bought nothing and cost a prerequisite: a GitHub key that a fresh machine does not have. The clone failing aborts `chezmoi apply` before the hooks script runs, so the cheapest transport is the right one |
+| 2026-09-17 | `60-agent-hooks` is plain `run_after_`, the only non-`run_onchange_` install script | Its rendered text depends on no data, so `run_onchange_` would have executed it once per machine and never again. The five installers are idempotent and take under a second, so the cost of running them every apply is smaller than the cost of a hook frozen at day-one version |
+| 2026-09-17 | The skill directory name is the slugified lock file key, not the upstream path | The two agree for twelve of thirteen skills, which is the worst possible failure shape: a path-derived name quietly renames `writing-hookify-rules` to `writing-rules` and nothing complains. CI now asserts that single case, because it is the only one that can regress |
+| 2026-09-17 | The profile prompt text is three words, with the explanation moved to README | The prompt string is also the `--promptChoice` lookup key, and the flag parses comma-separated `key=value` pairs. A descriptive prompt containing a comma and an `=` cannot be answered non-interactively under any key, which is what made CI unrunnable |

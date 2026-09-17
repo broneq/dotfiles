@@ -20,8 +20,21 @@ git clone <this repo> ~/projects/dotfiles
 chezmoi init --source ~/projects/dotfiles
 ```
 
-`chezmoi init` asks once for the machine profile and stores the answer in
-`~/.config/chezmoi/chezmoi.toml`. Then:
+`chezmoi init` asks once for the machine profile:
+
+```
+Machine profile (managed/owned)?
+```
+
+Answer `managed` on the MDM-enrolled work Mac with no admin rights, `owned` on the
+personal Mac with root. The prompt is deliberately terse - it doubles as the lookup
+key CI uses to answer it without a terminal, and a key containing a comma or an `=`
+cannot be matched. The table below is the long form.
+
+The answer, and the source directory `init` was pointed at, are both stored in
+`~/.config/chezmoi/chezmoi.toml`. The second half matters: `chezmoi init --source`
+does not persist that path by itself, so without it the `chezmoi apply` below would
+resolve to `~/.local/share/chezmoi`, find nothing and report success. Then:
 
 ```sh
 chezmoi diff          # review every byte that would change on disk
@@ -60,6 +73,12 @@ Four things are deliberately manual. Each one is a decision, not an omission.
 4. **Two agent skills.** `create-tasks-workspace` and `no-mistakes` are present in
    `~/.agents/skills` but have no entry in `.skill-lock.json`, so there is no
    source to restore them from. The other thirteen restore automatically.
+5. **`herdr` and `claude` themselves.** Both are standalone binaries in
+   `~/.local/bin` and no install channel declares them. This repository symlinks
+   herdr's config, installs its Claude Code hook and restores its skill, but does
+   not put the binary on the machine; the hooks script prints
+   `herdr is not installed, skipping` and carries on. Tracked as an open question
+   in `docs/ROADMAP.md`, not as a decision.
 
 ## Verification
 
@@ -70,4 +89,7 @@ chezmoi apply --dry-run -v
 ```
 
 CI runs `scripts/check.sh`, shellchecks the rendered script templates, and applies
-the whole tree into a throwaway `HOME` under both profiles.
+the whole tree into a throwaway `HOME` under both profiles. It does **not** run the
+install scripts: `--exclude=scripts` keeps `brew bundle`, the npm globals, the uv
+tools, the skill clones and the hook installers out of every run. They are rendered
+and shellchecked, never executed. Their first real run is on a machine.

@@ -48,9 +48,11 @@ install_skill() {
 	local url skill_path folder checkout src
 	url="$1"
 	skill_path="$2"
-	# The lock file keys are display names ("Agent Development"); the directory on
-	# disk is the parent of SKILL.md ("agent-development"). Use the path, not the key.
-	folder="$(basename "$(dirname "$skill_path")")"
+	# The installed directory name is the slug of the lock file key, expanded at
+	# template time. Deriving it from the path instead looks equivalent and is not:
+	# "Writing Hookify Rules" lives at plugins/hookify/skills/writing-rules/, and a
+	# restore keyed on the path silently renames the skill to `writing-rules`.
+	folder="$3"
 
 	if ! checkout="$(clone_once "$url")"; then
 		printf 'skill %s: clone of %s failed\n' "$folder" "$url" >&2
@@ -73,17 +75,19 @@ install_skill() {
 
 {{ $lock := include "dot_agents/dot_skill-lock.json" | fromJson -}}
 {{ range $name, $skill := $lock.skills -}}
-install_skill "{{ $skill.sourceUrl }}" "{{ $skill.skillPath }}"
+install_skill "{{ $skill.sourceUrl }}" "{{ $skill.skillPath }}" "{{ $name | lower | replace " " "-" }}"
 {{ end }}
 # settings.json registers a plugin marketplace at a local directory. Without the
 # clone, every bdk plugin fails to load, with an error that does not name this as
 # the cause. Make the dependency explicit instead.
+#
+# HTTPS, not SSH: the repository is public, and an SSH remote would make a GitHub
+# key an undeclared prerequisite of `chezmoi apply` on a machine that has none yet.
 if [ ! -d "$bdk_dir/.git" ]; then
 	printf 'plugin marketplace %s is missing; cloning\n' "$bdk_dir"
 	mkdir -p "$(dirname "$bdk_dir")"
-	if ! git clone --quiet git@github.com:broneq/bdk.git "$bdk_dir"; then
-		printf 'clone of bdk failed. It is an SSH remote, so this needs a key that\n' >&2
-		printf 'GitHub knows about. Clone it by hand and re-run chezmoi apply.\n' >&2
+	if ! git clone --quiet https://github.com/broneq/bdk.git "$bdk_dir"; then
+		printf 'clone of bdk failed. Clone it by hand and re-run chezmoi apply.\n' >&2
 		failures=$((failures + 1))
 	fi
 fi

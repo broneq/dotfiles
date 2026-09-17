@@ -22,7 +22,7 @@ put there is lost.
 | Keys | Author | Versioned |
 |---|---|---|
 | `model`, `tui`, `permissions`, `statusLine`, `enabledPlugins`, `extraKnownMarketplaces`, `cleanupPeriodDays`, `autoCompactWindow`, the `auto*` and `skip*` flags | you | yes, in the `modify_` script |
-| `hooks` | `herdr`, `atuin`, `rtk`, `gh-axi`, `chrome-devtools-axi` | no - reinstalled by `run_onchange_after_60-agent-hooks.sh` |
+| `hooks` | `herdr`, `atuin`, `rtk`, `gh-axi`, `chrome-devtools-axi` | no - each tool reinstalls its own on every apply |
 | `autoMode` | Claude Code, generated per project | no |
 
 **Adding a setting** means editing the jq object in the `modify_` script. Do not

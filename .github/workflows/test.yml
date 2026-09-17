@@ -24,18 +24,32 @@ jobs:
       # check.sh skips *.sh.tmpl because a chezmoi template is not valid shell
       # until it is rendered. Render both profiles and shellcheck the output: a
       # template can be syntactically fine on one branch and broken on the other.
+      #
+      # Two chezmoi details this step used to get wrong, both of which failed
+      # silently rather than loudly:
+      #
+      #   - `execute-template --init` only makes the prompt* functions callable. It
+      #     feeds back neither the config template's [data] nor .chezmoidata, so
+      #     every `.profile` and `.packages` reference errored. Generate a real
+      #     config with `init` first and render against it with --config.
+      #   - --promptChoice is keyed on the prompt TEXT, not on the name of the field
+      #     it fills. "Machine profile" must stay identical to the string in
+      #     .chezmoi.toml.tmpl, or the prompt fires and answers itself.
       - name: Shellcheck rendered script templates
         run: |
           set -euo pipefail
-          rendered="$(mktemp -d)"
+          work="$(mktemp -d)"
           status=0
           for profile in managed owned; do
+            cfg="$work/$profile.toml"
+            chezmoi init --source . \
+              --promptChoice "Machine profile=$profile" \
+              --destination "$work/home-$profile" \
+              --config-path "$cfg" --no-tty
             for tmpl in home/.chezmoiscripts/*.sh.tmpl home/dot_claude/modify_settings.json.tmpl; do
               name="$(basename "${tmpl%.tmpl}")"
-              out="$rendered/$profile-$name"
-              chezmoi execute-template \
-                --init --promptChoice "profile=$profile" \
-                --source . <"$tmpl" >"$out"
+              out="$work/$profile-$name"
+              chezmoi execute-template --config "$cfg" <"$tmpl" >"$out"
               # modify_settings.json.tmpl is POSIX sh; the rest is bash.
               case "$name" in
                 modify_*) shellcheck --shell=sh "$out" || status=1 ;;
@@ -61,17 +75,41 @@ jobs:
       # --exclude=scripts is what keeps this job honest AND fast: the run_onchange_
       # scripts install 29 formulae, which buys nothing here and costs minutes. The
       # rendered Brewfile is asserted separately below.
+      #
+      # --config-path is required: without it `init` writes the generated config
+      # into the runner's real HOME, not into the throwaway destination, and every
+      # assertion below reads a file that was never created.
+      #
+      # `apply` deliberately does NOT pass --source. The config that `init` just
+      # wrote records sourceDir, and a bare apply finding the right source tree is
+      # exactly what the documented bootstrap in README depends on.
       - name: Apply into a throwaway HOME
         run: |
           set -euo pipefail
           fake="$(mktemp -d)"
           chezmoi init --source . \
-            --promptChoice "profile=${{ matrix.profile }}" \
-            --destination "$fake" --no-tty
-          chezmoi apply --source . --destination "$fake" \
+            --promptChoice "Machine profile=${{ matrix.profile }}" \
+            --destination "$fake" \
+            --config-path "$fake/.config/chezmoi/chezmoi.toml" \
+            --no-tty
+          chezmoi apply --destination "$fake" \
             --config "$fake/.config/chezmoi/chezmoi.toml" \
             --exclude=scripts --no-tty
           echo "FAKE_HOME=$fake" >>"$GITHUB_ENV"
+
+      # The prompt once answered itself: --promptChoice keyed on the field name
+      # silently returned the prompt string as the profile, every `eq .profile`
+      # branch went false, and nothing failed loudly. Assert the answer landed.
+      - name: Assert init took the answer and recorded the source
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          cfg="$FAKE_HOME/.config/chezmoi/chezmoi.toml"
+
+          grep -q 'profile = "${{ matrix.profile }}"' "$cfg" \
+            || fail "--promptChoice did not answer the profile prompt: $(grep profile "$cfg")"
+          grep -q '^sourceDir = ' "$cfg" \
+            || fail "init did not record sourceDir; a bare 'chezmoi apply' would apply nothing"
 
       - name: Assert the destination looks right
         run: |
@@ -84,10 +122,15 @@ jobs:
           [ -f "$FAKE_HOME/.claude/settings.json" ] || fail "settings.json missing"
 
           # settings.json is produced by a modify_ script, so assert the merge did
-          # what it claims: our key is present with the path resolved against this
-          # HOME, and no hook file was written by chezmoi.
+          # what it claims: our key is present with the path resolved, and no hook
+          # file was written by chezmoi.
+          #
+          # The expected path is built from $HOME, not $FAKE_HOME. `.chezmoi.homeDir`
+          # is the user's home directory and does not follow --destination, which is
+          # correct: the skills script clones the marketplace to "$HOME/projects/bdk"
+          # with plain shell, and the two must name the same directory.
           jq -e '.extraKnownMarketplaces.bdk.source.path == $p' \
-            --arg p "$FAKE_HOME/projects/bdk" \
+            --arg p "$HOME/projects/bdk" \
             "$FAKE_HOME/.claude/settings.json" >/dev/null \
             || fail "bdk marketplace path was not merged in"
           [ ! -e "$FAKE_HOME/.claude/hooks" ] || fail "chezmoi wrote a hook file; tools own those"
@@ -99,8 +142,8 @@ jobs:
       - name: Assert the profile split diverges
         run: |
           set -euo pipefail
-          brewfile="$(chezmoi execute-template --init \
-            --promptChoice "profile=${{ matrix.profile }}" --source . \
+          brewfile="$(chezmoi execute-template \
+            --config "$FAKE_HOME/.config/chezmoi/chezmoi.toml" \
             <home/.chezmoiscripts/run_onchange_10-brew.sh.tmpl)"
 
           echo "$brewfile" | grep -q 'brew "chezmoi"' \
@@ -116,3 +159,18 @@ jobs:
               && { echo "::error::owned must not override appdir"; exit 1; }
           fi
           exit 0
+
+      # The restore script derives each skill's directory from its lock file key,
+      # not from its path in the upstream repository. The two agree for twelve of
+      # the thirteen skills, which is exactly why the thirteenth went unnoticed.
+      - name: Assert skill directories keep their names
+        run: |
+          set -euo pipefail
+          rendered="$(chezmoi execute-template \
+            --config "$FAKE_HOME/.config/chezmoi/chezmoi.toml" \
+            <home/.chezmoiscripts/run_onchange_after_50-claude-skills.sh.tmpl)"
+
+          echo "$rendered" | grep -q '"plugins/hookify/skills/writing-rules/SKILL.md" "writing-hookify-rules"' \
+            || { echo "::error::skill directory name is derived from the path again"; exit 1; }
+          echo "$rendered" | grep -q 'git clone --quiet https://github.com/broneq/bdk.git' \
+            || { echo "::error::the bdk marketplace clone must not require an SSH key"; exit 1; }

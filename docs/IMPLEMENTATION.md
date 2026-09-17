@@ -14,7 +14,7 @@ here, the sentence belongs in the roadmap instead.
 ```
 .chezmoiroot                 -> "home": chezmoi's source is home/, not the repo root
 home/
-  .chezmoi.toml.tmpl         profile prompt, evaluated once at `chezmoi init`
+  .chezmoi.toml.tmpl         profile prompt and sourceDir, evaluated at `chezmoi init`
   .chezmoidata/packages.yaml the only place package names appear
   .chezmoiremove             paths chezmoi deletes from the destination
   .chezmoiscripts/           install scripts, never part of the file tree
@@ -62,9 +62,10 @@ has the key-by-key split.
 
 ### Hooks belong to their tools
 
-Not one hook file is versioned. Four of the five Claude Code hooks are a bare
-command on `PATH` - `atuin hook claude-code`, `rtk hook claude`, `gh-axi`,
-`chrome-devtools-axi` - with nothing on disk to reproduce. The fifth, herdr,
+Not one hook file is versioned. Four of the five Claude Code hooks are installed
+by a bare command on `PATH` - `atuin hook install claude-code`, `rtk init --global`,
+`gh-axi setup hooks`, `chrome-devtools-axi setup hooks` - with nothing on disk to
+reproduce. The fifth, herdr,
 ships a script, and that one file was the source of four separate problems: it
 forced an absolute path into `settings.json`, it is vendor-managed so
 `chezmoi apply` would revert herdr's own upgrade, it is POSIX `sh` and could not
@@ -78,10 +79,19 @@ $ herdr integration status
 claude: current (v10) (~/.claude/hooks/herdr-agent-state.sh)
 ```
 
-So `run_onchange_after_60-agent-hooks.sh.tmpl` calls each tool's own installer
-instead. The declaration did not disappear, it changed form: `packages.yaml` says
-which tools exist, the script says how each one installs its hook, and both are
-executable rather than a snapshot.
+So `run_after_60-agent-hooks.sh.tmpl` calls each tool's own installer instead. The
+declaration did not disappear, it changed form: `packages.yaml` says which tools
+exist, the script says how each one installs its hook, and both are executable
+rather than a snapshot.
+
+This one script is `run_after_`, not `run_onchange_after_`, and it is the only
+exception in the tree. A `run_onchange_` script re-runs when its own rendered text
+changes, and this script's text depends on nothing - not on `packages.yaml`, not on
+the lock file. It would have executed exactly once in the lifetime of a machine: a
+tool installed later would never get its hook, and a tool that upgraded would keep
+serving the hook it shipped with on day one, which is the precise failure the
+"hooks belong to their tools" decision was meant to avoid. All five installers are
+idempotent and cheap, so they run on every apply.
 
 ### Whitelisting, never directory-adding
 
@@ -144,10 +154,14 @@ Three entries are there for reasons that are not obvious from the list:
 | `run_onchange_30-npm-global.sh.tmpl` | Sources nvm explicitly. Installing under whichever node is first on PATH would scatter the five tools across the two or three node installations this machine has. |
 | `run_onchange_40-uv-tools.sh.tmpl` | Bootstraps `uv` if absent. The `curl \| sh` in the guarded branch is the only downloaded script in the repository. |
 | `run_onchange_after_50-claude-skills.sh.tmpl` | See below. |
+| `run_after_60-agent-hooks.sh.tmpl` | Calls each tool's own hook installer. Plain `run_`, not `run_onchange_`; see "Hooks belong to their tools". |
 
 `run_onchange_` re-runs when the script's own text changes. Because the package
 list is templated into the script body, editing `packages.yaml` changes the text
 and re-triggers the run. Nothing hashes anything explicitly.
+
+The corollary is the trap: a `run_onchange_` script whose text depends on no data
+runs once and never again. `60-agent-hooks` is that case and is plain `run_`.
 
 ## Skill restore
 
@@ -156,9 +170,12 @@ by a package manager, so restore is ours to write. Three details decide the shap
 of the script:
 
 1. **The lock file's keys are display names.** `"Agent Development"` maps to the
-   directory `agent-development`. The directory name comes from
-   `basename(dirname(skillPath))`, never from the key. Using the key would produce
-   `~/.agents/skills/Agent Development`.
+   directory `agent-development`, so the key is lowercased and spaces become dashes
+   at template time. Deriving the name from `basename(dirname(skillPath))` instead
+   looks equivalent and agrees for twelve of the thirteen skills, which is why the
+   thirteenth went unnoticed: `"Writing Hookify Rules"` lives upstream at
+   `plugins/hookify/skills/writing-rules/`, and a path-derived restore silently
+   renames the installed skill to `writing-rules`. CI asserts this one case.
 2. **Four of the thirteen skills live in `anthropics/claude-code`.** Cloning per
    skill would fetch the same repository four times, so clones are cached per URL
    for the duration of the run.
@@ -170,7 +187,11 @@ of the script:
 The script is `after_` so it runs once the file tree is in place. It also clones
 `~/projects/bdk` if missing: `settings.json` registers a plugin marketplace at that
 local path, and without it every bdk plugin fails to load with an error that does
-not name the cause. It is an SSH remote, so the failure message says so.
+not name the cause. The clone is HTTPS even though the repository is the author's
+own: the repository is public, and an SSH remote would have made a GitHub key an
+undeclared prerequisite of `chezmoi apply` on a machine that has none yet. That
+mattered more than it looks, because this script's failure aborts the apply before
+the hooks script runs.
 
 Thirteen of the fifteen skills on disk are covered. `create-tasks-workspace` and
 `no-mistakes` have no lock entry and therefore no source; they are documented as
@@ -188,6 +209,32 @@ uv and atuin env files are the two that previously aborted the shell outright.
 
 `$HOMEBREW_PREFIX` is used instead of a literal `/opt/homebrew` so the file does
 not assume Apple silicon. `.zprofile` probes both prefixes.
+
+## Two chezmoi flags that fail silently
+
+Both of these were wrong in CI for as long as CI existed, and neither announced
+itself. They are documented here because nothing mechanical can catch them.
+
+**`--promptChoice` is keyed on the prompt text, not on the field it fills.**
+`promptChoiceOnce . "profile" "Machine profile" …` is answered by
+`--promptChoice "Machine profile=owned"`. Passing `--promptChoice "profile=owned"`
+does not error: the prompt fires, finds no TTY, and the template receives the
+literal string `Machine profile` as the profile. Every `eq .profile "owned"` branch
+then goes false and the render looks plausible. The flag takes comma-separated
+`key=value` pairs, so the prompt text must also contain no comma and no `=` - which
+is why the prompt is three words and the explanation lives in the README.
+
+**`execute-template --init` only makes the `prompt*` functions callable.** It feeds
+back neither the config template's `[data]` nor `.chezmoidata`, so `.profile` and
+`.packages` are both absent under it. To render a script template the way a real
+machine renders it, generate a config with `chezmoi init --config-path` first and
+pass it with `--config`. CI does exactly that.
+
+**`chezmoi init` does not persist `--source`.** The generated config records the
+profile and nothing else unless the template writes `sourceDir` itself, so a later
+bare `chezmoi apply` falls back to `~/.local/share/chezmoi`, finds an empty
+directory and applies nothing at all. `.chezmoi.toml.tmpl` writes `sourceDir` for
+that reason, and the CI apply job runs a bare `apply` to keep it honest.
 
 ## Portability
 
@@ -210,7 +257,18 @@ things it cannot do locally:
   branch and broken on the other.
 - **A full apply into a throwaway `HOME`,** under both profiles, with
   `--exclude=scripts`. Installing 29 formulae per run buys nothing and costs
-  minutes; the rendered Brewfile is asserted directly instead.
+  minutes; the rendered Brewfile is asserted directly instead. The apply runs
+  without `--source`, so it passes only if `init` recorded `sourceDir`.
+- **That the profile prompt was actually answered.** The generated config is
+  grepped for the profile the matrix asked for. Without that assertion, the
+  `--promptChoice` trap above turns every profile-dependent branch off and the
+  remaining assertions still pass.
 
 The apply job also asserts the `~/.claude` file count, which is the standing guard
-against the 1.5 GB accident.
+against the 1.5 GB accident, and the one skill whose directory name the lock file
+and the upstream path disagree on.
+
+One thing CI does **not** cover: the install scripts themselves. `--exclude=scripts`
+means `brew bundle`, the npm globals, the uv tools, the skill clones and the hook
+installers are rendered and shellchecked but never executed. Their first real run is
+on a machine.
