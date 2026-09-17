@@ -8,10 +8,17 @@ on:
 permissions:
   contents: read
 
+# Every job here runs against a throwaway HOME rather than --destination. That is
+# not cosmetic: the install scripts address the machine through $HOME, so a job
+# that only moves --destination can never execute them, and assertions built on
+# `.chezmoi.homeDir` compare against the runner's real home instead of the tree
+# under test. Overriding HOME moves homeDir, destDir and the scripts together.
+
 jobs:
   lint:
-    name: guardrails and shellcheck
+    name: gates
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -22,46 +29,21 @@ jobs:
         run: ./scripts/check.sh
 
       # check.sh skips *.sh.tmpl because a chezmoi template is not valid shell
-      # until it is rendered. Render both profiles and shellcheck the output: a
-      # template can be syntactically fine on one branch and broken on the other.
-      #
-      # Two chezmoi details this step used to get wrong, both of which failed
-      # silently rather than loudly:
-      #
-      #   - `execute-template --init` only makes the prompt* functions callable. It
-      #     feeds back neither the config template's [data] nor .chezmoidata, so
-      #     every `.profile` and `.packages` reference errored. Generate a real
-      #     config with `init` first and render against it with --config.
-      #   - --promptChoice is keyed on the prompt TEXT, not on the name of the field
-      #     it fills. "Machine profile" must stay identical to the string in
-      #     .chezmoi.toml.tmpl, or the prompt fires and answers itself.
-      - name: Shellcheck rendered script templates
-        run: |
-          set -euo pipefail
-          work="$(mktemp -d)"
-          status=0
-          for profile in managed owned; do
-            cfg="$work/$profile.toml"
-            chezmoi init --source . \
-              --promptChoice "Machine profile=$profile" \
-              --destination "$work/home-$profile" \
-              --config-path "$cfg" --no-tty
-            for tmpl in home/.chezmoiscripts/*.sh.tmpl home/dot_claude/modify_settings.json.tmpl; do
-              name="$(basename "${tmpl%.tmpl}")"
-              out="$work/$profile-$name"
-              chezmoi execute-template --config "$cfg" <"$tmpl" >"$out"
-              # modify_settings.json.tmpl is POSIX sh; the rest is bash.
-              case "$name" in
-                modify_*) shellcheck --shell=sh "$out" || status=1 ;;
-                *)        shellcheck --shell=bash "$out" || status=1 ;;
-              esac
-            done
-          done
-          exit "$status"
+      # until rendered, and says so in its own output.
+      - name: Rendered templates shellcheck clean, both profiles
+        run: ./scripts/check-templates.sh
+
+      # A gate that passes on a clean tree proves nothing by itself: one with every
+      # check accidentally disabled passes identically. This plants each violation
+      # in turn, including two broken templates, and asserts the right gate fails
+      # with the right message.
+      - name: Gates reject what they claim to reject
+        run: ./scripts/check-negative.sh
 
   apply:
     name: apply (${{ matrix.profile }})
     runs-on: macos-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -72,34 +54,45 @@ jobs:
       - name: Install chezmoi
         run: brew install chezmoi
 
-      # --exclude=scripts is what keeps this job honest AND fast: the run_onchange_
-      # scripts install 29 formulae, which buys nothing here and costs minutes. The
-      # rendered Brewfile is asserted separately below.
-      #
-      # --config-path is required: without it `init` writes the generated config
-      # into the runner's real HOME, not into the throwaway destination, and every
-      # assertion below reads a file that was never created.
-      #
-      # `apply` deliberately does NOT pass --source. The config that `init` just
-      # wrote records sourceDir, and a bare apply finding the right source tree is
-      # exactly what the documented bootstrap in README depends on.
-      - name: Apply into a throwaway HOME
+      # settings.json has three authors. Seeding the destination with what the
+      # other two write is the only way to exercise the merge: on an empty HOME the
+      # modify_ script has nothing to preserve and the interesting half of it never
+      # runs. The model key collides on purpose.
+      - name: Seed a settings.json written by the other two authors
         run: |
           set -euo pipefail
           fake="$(mktemp -d)"
-          chezmoi init --source . \
-            --promptChoice "Machine profile=${{ matrix.profile }}" \
-            --destination "$fake" \
-            --config-path "$fake/.config/chezmoi/chezmoi.toml" \
-            --no-tty
-          chezmoi apply --destination "$fake" \
-            --config "$fake/.config/chezmoi/chezmoi.toml" \
-            --exclude=scripts --no-tty
+          mkdir -p "$fake/.claude"
+          cat >"$fake/.claude/settings.json" <<'JSON'
+          {
+            "model": "sonnet",
+            "autoMode": {
+              "allow": ["Bash(echo:*)"],
+              "environment": ["**Organization**: Example"]
+            },
+            "hooks": {
+              "SessionStart": [
+                { "hooks": [{ "type": "command", "command": "echo from-a-tool" }] }
+              ]
+            },
+            "someOtherTool": { "keepMe": true }
+          }
+          JSON
           echo "FAKE_HOME=$fake" >>"$GITHUB_ENV"
 
-      # The prompt once answered itself: --promptChoice keyed on the field name
-      # silently returned the prompt string as the profile, every `eq .profile`
-      # branch went false, and nothing failed loudly. Assert the answer landed.
+      # --promptChoice is keyed on the prompt TEXT, not on the field it fills.
+      # "Machine profile" must stay identical to the string in .chezmoi.toml.tmpl,
+      # or the prompt fires, finds no TTY and answers itself with its own text.
+      #
+      # `apply` passes no --source: the config init just wrote records sourceDir,
+      # and a bare apply finding the source tree is what README's bootstrap needs.
+      - name: Apply into the throwaway HOME
+        run: |
+          set -euo pipefail
+          env HOME="$FAKE_HOME" chezmoi init --source . \
+            --promptChoice "Machine profile=${{ matrix.profile }}" --no-tty
+          env HOME="$FAKE_HOME" chezmoi apply --exclude=scripts --no-tty
+
       - name: Assert init took the answer and recorded the source
         run: |
           set -euo pipefail
@@ -111,39 +104,70 @@ jobs:
           grep -q '^sourceDir = ' "$cfg" \
             || fail "init did not record sourceDir; a bare 'chezmoi apply' would apply nothing"
 
+      # -e, not -L: -L only says the path is a symlink, so a link pointing at
+      # nothing passes it.
       - name: Assert the destination looks right
         run: |
           set -euo pipefail
           fail() { echo "::error::$1"; exit 1; }
 
-          [ -L "$FAKE_HOME/.config/nvim" ]    || fail ".config/nvim is not a symlink"
-          [ -L "$FAKE_HOME/.config/wezterm" ] || fail ".config/wezterm is not a symlink"
-          [ -f "$FAKE_HOME/.zshrc" ]          || fail ".zshrc missing"
-          [ -f "$FAKE_HOME/.claude/settings.json" ] || fail "settings.json missing"
+          for link in .config/nvim .config/wezterm .config/herdr/config.toml; do
+            [ -L "$FAKE_HOME/$link" ] || fail "$link is not a symlink"
+            [ -e "$FAKE_HOME/$link" ] || fail "$link is a symlink to nothing"
+          done
+          for f in .zshrc .zprofile .gitconfig .claude/CLAUDE.md .claude/RTK.md \
+                   .claude/settings.json .agents/.skill-lock.json; do
+            [ -f "$FAKE_HOME/$f" ] || fail "$f missing"
+          done
 
-          # settings.json is produced by a modify_ script, so assert the merge did
-          # what it claims: our key is present with the path resolved, and no hook
-          # file was written by chezmoi.
-          #
-          # The expected path is built from $HOME, not $FAKE_HOME. `.chezmoi.homeDir`
-          # is the user's home directory and does not follow --destination, which is
-          # correct: the skills script clones the marketplace to "$HOME/projects/bdk"
-          # with plain shell, and the two must name the same directory.
           jq -e '.extraKnownMarketplaces.bdk.source.path == $p' \
-            --arg p "$HOME/projects/bdk" \
+            --arg p "$FAKE_HOME/projects/bdk" \
             "$FAKE_HOME/.claude/settings.json" >/dev/null \
             || fail "bdk marketplace path was not merged in"
           [ ! -e "$FAKE_HOME/.claude/hooks" ] || fail "chezmoi wrote a hook file; tools own those"
 
-          # The .claude directory holds gigabytes of runtime state. Only authored files may appear.
+          # The .claude directory holds gigabytes of runtime state. Only authored
+          # files may appear. Symlinks are not counted by -type f.
           count="$(find "$FAKE_HOME/.claude" -type f | wc -l | tr -d ' ')"
           [ "$count" -eq 3 ] || fail "expected 3 authored files under .claude, found $count"
+
+      - name: Assert the merge kept the other authors
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          s="$FAKE_HOME/.claude/settings.json"
+
+          jq -e '.hooks.SessionStart[0].hooks[0].command == "echo from-a-tool"' "$s" >/dev/null \
+            || fail "the hooks block was not preserved; the tools own it"
+          jq -e '.autoMode.allow[0] == "Bash(echo:*)"' "$s" >/dev/null \
+            || fail "autoMode was not preserved; Claude Code owns it"
+          jq -e '.someOtherTool.keepMe == true' "$s" >/dev/null \
+            || fail "an unrelated top-level key was dropped"
+          jq -e '.model == "opus"' "$s" >/dev/null \
+            || fail "our own value did not win the collision on .model"
+          jq -e '.statusLine.command == "bunx -y ccstatusline@latest"' "$s" >/dev/null \
+            || fail "our own keys were not merged in"
+
+      # A modify_ script runs on every apply and rewrites the file each time. If it
+      # is not byte-stable, chezmoi reports a change forever and `chezmoi diff`
+      # stops being a usable review tool.
+      - name: Assert a second apply changes nothing
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          before="$(shasum -a 256 <"$FAKE_HOME/.claude/settings.json")"
+          env HOME="$FAKE_HOME" chezmoi apply --exclude=scripts --no-tty
+          after="$(shasum -a 256 <"$FAKE_HOME/.claude/settings.json")"
+          [ "$before" = "$after" ] || fail "the settings.json merge is not byte-stable"
+
+          out="$(env HOME="$FAKE_HOME" chezmoi diff --exclude=scripts --no-tty)"
+          [ -z "$out" ] || { echo "$out" | head -40; fail "a second apply still has work to do"; }
 
       - name: Assert the profile split diverges
         run: |
           set -euo pipefail
-          brewfile="$(chezmoi execute-template \
-            --config "$FAKE_HOME/.config/chezmoi/chezmoi.toml" \
+          brewfile="$(env HOME="$FAKE_HOME" chezmoi execute-template \
             <home/.chezmoiscripts/run_onchange_10-brew.sh.tmpl)"
 
           echo "$brewfile" | grep -q 'brew "chezmoi"' \
@@ -160,17 +184,125 @@ jobs:
           fi
           exit 0
 
-      # The restore script derives each skill's directory from its lock file key,
-      # not from its path in the upstream repository. The two agree for twelve of
-      # the thirteen skills, which is exactly why the thirteenth went unnoticed.
-      - name: Assert skill directories keep their names
+      # The git email is the second of the two real divergences and was the only
+      # one nothing checked. Compared against the other profile rather than against
+      # a literal, so the addresses stay declared in exactly one place.
+      - name: Assert the git identity switches on the profile
         run: |
           set -euo pipefail
-          rendered="$(chezmoi execute-template \
-            --config "$FAKE_HOME/.config/chezmoi/chezmoi.toml" \
-            <home/.chezmoiscripts/run_onchange_after_50-claude-skills.sh.tmpl)"
+          fail() { echo "::error::$1"; exit 1; }
 
-          echo "$rendered" | grep -q '"plugins/hookify/skills/writing-rules/SKILL.md" "writing-hookify-rules"' \
-            || { echo "::error::skill directory name is derived from the path again"; exit 1; }
-          echo "$rendered" | grep -q 'git clone --quiet https://github.com/broneq/bdk.git' \
-            || { echo "::error::the bdk marketplace clone must not require an SSH key"; exit 1; }
+          if [ "${{ matrix.profile }}" = managed ]; then other=owned; else other=managed; fi
+          otherhome="$(mktemp -d)"
+          env HOME="$otherhome" chezmoi init --source . \
+            --promptChoice "Machine profile=$other" --no-tty
+
+          mine="$(grep -E '^[[:space:]]*email' "$FAKE_HOME/.gitconfig")"
+          theirs="$(env HOME="$otherhome" chezmoi execute-template \
+            <home/dot_gitconfig.tmpl | grep -E '^[[:space:]]*email')"
+
+          [ -n "$mine" ] || fail "no git email was rendered for ${{ matrix.profile }}"
+          [ "$mine" != "$theirs" ] \
+            || fail "both profiles render the same git email, so the split does nothing"
+
+  skills:
+    name: skill restore
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install chezmoi
+        run: brew install chezmoi
+
+      # The restore script is profile-independent, so it runs once rather than per
+      # matrix leg. Executing it, rather than grepping its rendered text, is the
+      # only way to cover the clone cache, the copy, the symlinks and the names.
+      - name: Restore the skill set for real
+        run: |
+          set -euo pipefail
+          fake="$(mktemp -d)"
+          env HOME="$fake" chezmoi init --source . \
+            --promptChoice "Machine profile=managed" --no-tty
+          env HOME="$fake" chezmoi execute-template \
+            <home/.chezmoiscripts/run_onchange_after_50-claude-skills.sh.tmpl >"$fake/restore.sh"
+          env HOME="$fake" bash "$fake/restore.sh"
+          echo "FAKE_HOME=$fake" >>"$GITHUB_ENV"
+
+      - name: Assert the skills landed under the names they have today
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          count="$(find "$FAKE_HOME/.agents/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+          [ "$count" -eq 13 ] || fail "expected 13 restored skills, found $count"
+
+          for d in "$FAKE_HOME"/.agents/skills/*/; do
+            [ -f "$d/SKILL.md" ] || fail "$(basename "$d") has no SKILL.md"
+          done
+
+          for l in "$FAKE_HOME"/.claude/skills/*; do
+            [ -L "$l" ] || fail "$(basename "$l") is not a symlink"
+            [ -e "$l" ] || fail "$(basename "$l") is a symlink to nothing"
+          done
+
+          # The lock key slugifies to writing-hookify-rules; the upstream path says
+          # writing-rules. Twelve of thirteen agree, which is why this one needs
+          # naming explicitly.
+          [ -d "$FAKE_HOME/.agents/skills/writing-hookify-rules" ] \
+            || fail "writing-hookify-rules was renamed by the restore"
+
+          # settings.json registers the marketplace at this path; without the clone
+          # every bdk plugin fails to load with an error that does not name it.
+          [ -d "$FAKE_HOME/projects/bdk/.git" ] || fail "the bdk marketplace was not cloned"
+
+  packages:
+    name: package names resolve
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install chezmoi
+        run: brew install chezmoi
+
+      # A typo in packages.yaml renders, shellchecks and applies perfectly, then
+      # fails halfway through `brew bundle` on a real machine. Checking the names
+      # against their registries costs seconds and installs nothing.
+      #
+      # The names come from the same data the install scripts read, so this adds no
+      # second place for a package name to live.
+      - name: Every declared package exists in its channel
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          fake="$(mktemp -d)"
+          env HOME="$fake" chezmoi init --source . \
+            --promptChoice "Machine profile=managed" --no-tty
+
+          names() { env HOME="$fake" chezmoi execute-template; }
+
+          formulae="$(printf '%s' '{{ range .packages.homebrew.formulae }}{{ . }} {{ end }}' | names)"
+          casks="$(printf '%s' '{{ range .packages.homebrew.casks.user_level }}{{ . }} {{ end }}{{ range .packages.homebrew.casks.app_bundle }}{{ . }} {{ end }}' | names)"
+          npms="$(printf '%s' '{{ range .packages.npm }}{{ . }} {{ end }}' | names)"
+          uvs="$(printf '%s' '{{ range .packages.uv }}{{ . }} {{ end }}' | names)"
+
+          echo "formulae: $formulae"
+          echo "casks:    $casks"
+          echo "npm:      $npms"
+          echo "uv:       $uvs"
+
+          [ -n "$formulae" ] || fail "no formulae were rendered; the data path is broken"
+
+          # shellcheck disable=SC2086  # deliberate word splitting into one call
+          brew info --json=v2 $formulae >/dev/null || fail "an unknown Homebrew formula is declared"
+          # shellcheck disable=SC2086
+          brew info --json=v2 --cask $casks >/dev/null || fail "an unknown Homebrew cask is declared"
+
+          for p in $npms; do
+            npm view "$p" version >/dev/null 2>&1 || fail "npm package $p does not exist"
+          done
+          for p in $uvs; do
+            curl -fsS "https://pypi.org/pypi/$p/json" -o /dev/null \
+              || fail "PyPI package $p does not exist"
+          done

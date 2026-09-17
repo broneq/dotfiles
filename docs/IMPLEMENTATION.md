@@ -25,8 +25,11 @@ home/
   dot_agents/…               /
   dot_config/symlink_*.tmpl  links pointing back into live/
 live/                        real files the applications rewrite in place
-scripts/check.sh             mechanical guardrails, run locally and in CI
-.github/workflows/test.yml   CI
+scripts/check.sh             mechanical guardrails; needs nothing installed
+scripts/check-templates.sh   renders every template under both profiles, shellchecks it
+scripts/check-negative.sh    plants each violation, asserts the gates catch it
+.github/workflows/test.yml   fast CI, every push
+.github/workflows/install.yml  the fresh-machine test, weekly and on demand
 ```
 
 `.chezmoiroot` exists so that `live/`, `scripts/` and `docs/` can sit at the repo
@@ -246,29 +249,85 @@ That rules out `mapfile`, associative arrays, and `${arr[@]}` over a possibly
 empty array under `set -u`. The working pattern is a temp file plus
 `while IFS= read -r`, as in `scripts/check.sh`.
 
-## What CI proves
+## Testing
 
-`scripts/check.sh` covers the mechanical rules on tracked files. CI adds the two
-things it cannot do locally:
+### The throwaway HOME, not `--destination`
 
-- **Rendered templates are shellchecked.** `check.sh` skips `*.sh.tmpl` because a
-  chezmoi template is not valid shell until rendered, and says so in its output.
-  CI renders each one under **both** profiles first - a template can be fine on one
-  branch and broken on the other.
-- **A full apply into a throwaway `HOME`,** under both profiles, with
-  `--exclude=scripts`. Installing 29 formulae per run buys nothing and costs
-  minutes; the rendered Brewfile is asserted directly instead. The apply runs
-  without `--source`, so it passes only if `init` recorded `sourceDir`.
-- **That the profile prompt was actually answered.** The generated config is
-  grepped for the profile the matrix asked for. Without that assertion, the
-  `--promptChoice` trap above turns every profile-dependent branch off and the
-  remaining assertions still pass.
+Every job runs against `env HOME="$fake"`. This is load-bearing rather than
+stylistic, for two reasons.
 
-The apply job also asserts the `~/.claude` file count, which is the standing guard
-against the 1.5 GB accident, and the one skill whose directory name the lock file
-and the upstream path disagree on.
+The install scripts address the machine through `$HOME`. chezmoi's `--destination`
+does not change that, so a job that only moves the destination can never execute
+them: they would write into the runner's real home. Overriding `HOME` moves
+`.chezmoi.homeDir`, `.chezmoi.destDir` and the scripts together, which is what
+makes `install.yml` possible at all.
 
-One thing CI does **not** cover: the install scripts themselves. `--exclude=scripts`
-means `brew bundle`, the npm globals, the uv tools, the skill clones and the hook
-installers are rendered and shellchecked but never executed. Their first real run is
-on a machine.
+It also fixes an assertion that used to be circular. `.chezmoi.homeDir` does not
+follow `--destination`, so the check that the `bdk` marketplace path was merged in
+correctly was comparing against the runner's own home - it asserted that jq had
+inserted what jq had inserted.
+
+### Three gates, all runnable by hand
+
+`check.sh` holds the mechanical rules and must run on a machine where nothing is
+installed, so it cannot require chezmoi. `check-templates.sh` does require it: a
+chezmoi template is not valid shell until rendered, and it renders each one under
+**both** profiles, because a template can be fine on one branch and broken on the
+other.
+
+`check-negative.sh` is the one that makes the other two mean anything. A gate
+passing on a clean tree is not evidence: a gate with every check accidentally
+disabled passes identically. It plants one violation at a time into a throwaway
+clone and asserts the right gate fails **with the right message** - exit 1 alone
+could come from any of the six checks. Two of its eight mutations are broken
+templates, one that renders into invalid shell and one that does not render at all.
+
+### What `test.yml` proves
+
+Beyond the three gates:
+
+- **The merge keeps the other authors.** The destination is seeded with a
+  `settings.json` carrying a `hooks` block, an `autoMode` block, an unrelated
+  top-level key and a colliding `model`. On an empty `HOME` the interesting half of
+  `modify_settings.json.tmpl` never runs at all.
+- **A second apply changes nothing.** The `modify_` script rewrites the file every
+  time; if it is not byte-stable, `chezmoi diff` stops being a usable review tool.
+- **The prompt was actually answered.** Without this, the `--promptChoice` trap
+  below turns every profile-dependent branch off and the rest still passes.
+- **A bare `apply` finds the source.** No `--source` is passed, so the job fails
+  unless `init` recorded `sourceDir`.
+- **Both real divergences.** `cask_args appdir:` in the rendered Brewfile, and the
+  git email - compared against the other profile's render rather than a literal, so
+  the addresses stay declared in one place.
+- **The skill restore, executed.** Thirteen directories, each with a `SKILL.md`,
+  thirteen symlinks that resolve, `writing-hookify-rules` under that name, and the
+  `bdk` clone. Grepping the rendered script proved none of it.
+- **Every declared package name exists.** `brew info`, `npm view` and the PyPI API,
+  reading the names from the same data the install scripts read. A typo renders,
+  shellchecks and applies perfectly, then fails halfway through `brew bundle`.
+
+Plus the `~/.claude` file count, the standing guard against the 1.5 GB accident.
+
+### What `install.yml` proves
+
+`test.yml` still passes `--exclude=scripts`, because 29 formulae per push costs
+minutes and blocks nothing. `install.yml` drops that exclusion, weekly and on
+demand, on a runner that is genuinely a clean Mac.
+
+It is the only thing that executes `brew bundle`, the npm globals, the uv
+bootstrap and the five hook installers, and therefore the only thing that can
+notice a formula renamed upstream, `atuin hook install` changing its arguments, or
+the uv installer moving. Its sharpest assertion is that `WezTerm.app` lands in
+`$HOME/Applications` under `managed` and in `/Applications` under `owned`: `brew
+bundle` has no `--appdir` flag, so the entire managed profile rests on `cask_args
+appdir:` being honoured, and nothing short of installing the cask can show that.
+
+### What no test can cover
+
+- **The `managed` profile in its essence.** The runner has admin rights. Missing
+  privileges, MDM, `dsmemberutil` reporting no membership: not reproducible. The
+  abort path in `assert-profile` could only be reached with a fake `dsmemberutil`
+  on `PATH`, which is testing the fake.
+- **herdr.** No channel installs it, so its hook is always skipped. An open
+  question in the roadmap, not a gap in the tests.
+- **A receipt-less `WezTerm.app`.** State of one machine, not of the repository.

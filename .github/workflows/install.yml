@@ -1,0 +1,144 @@
+name: install
+
+# The fresh-machine test. test.yml runs on every push and deliberately never
+# executes an install script; this one executes all of them, which is the only way
+# to learn that a formula was renamed upstream, that `atuin hook install` changed
+# its arguments, or that the uv bootstrap stopped working.
+#
+# It is a separate workflow because it takes tens of minutes and test.yml takes
+# seconds. Merging them would make the fast gate slow and the slow gate noisy.
+#
+# A macos-latest runner is a genuinely fresh Mac, which is the thing this
+# repository claims to support and has never been tried against.
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install
+  cancel-in-progress: false
+
+jobs:
+  install:
+    name: full apply (${{ matrix.profile }})
+    runs-on: macos-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [managed, owned]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install chezmoi
+        run: brew install chezmoi
+
+      # run_once_before_00-assert-profile.sh aborts when the profile is `owned` and
+      # the account is not in the admin group. Report the membership first, so that
+      # an abort reads as a fact about the runner rather than as a mystery.
+      - name: Report what the runner actually is
+        run: |
+          set -euo pipefail
+          user="$(id -un)"
+          echo "user: $user"
+          dsmemberutil checkmembership -U "$user" -G admin || true
+          echo "brew prefix: $(brew --prefix)"
+
+      # No --exclude=scripts, and HOME moved to the throwaway directory so that the
+      # scripts, which address the machine through $HOME, install into it.
+      #
+      # Homebrew itself is shared with the runner image and is not relocated: the
+      # formulae land in the real prefix, which is what a real machine does too.
+      - name: Apply everything, scripts included
+        run: |
+          set -euo pipefail
+          fake="$(mktemp -d)"
+          env HOME="$fake" chezmoi init --source . \
+            --promptChoice "Machine profile=${{ matrix.profile }}" --no-tty
+          env HOME="$fake" chezmoi apply --no-tty --verbose
+          echo "FAKE_HOME=$fake" >>"$GITHUB_ENV"
+
+      - name: Assert the Homebrew channel installed
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          installed="$(brew list --formula)"
+          for f in ripgrep fd shellcheck nvm atuin rtk chezmoi; do
+            echo "$installed" | grep -qx "$f" || fail "formula $f was not installed"
+          done
+
+      # The one assertion that cannot be made any other way. `brew bundle` has no
+      # --appdir flag, so the whole managed profile rests on `cask_args appdir:`
+      # inside the rendered Brewfile actually being honoured.
+      - name: Assert casks landed where the profile says
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          if [ "${{ matrix.profile }}" = managed ]; then
+            [ -d "$FAKE_HOME/Applications/WezTerm.app" ] \
+              || fail "managed did not put WezTerm.app in the home Applications directory"
+            [ ! -d /Applications/WezTerm.app ] \
+              || fail "managed installed into /Applications, which it has no rights to on a real machine"
+          else
+            [ -d /Applications/WezTerm.app ] \
+              || fail "owned did not put WezTerm.app in /Applications"
+          fi
+
+      - name: Assert the npm channel installed
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          export NVM_DIR="$FAKE_HOME/.nvm"
+          # shellcheck disable=SC1091
+          . "$(brew --prefix)/opt/nvm/nvm.sh"
+          for t in chrome-devtools-axi gh-axi lavish-axi quota-axi tasks-axi; do
+            command -v "$t" >/dev/null 2>&1 || fail "npm tool $t is not on PATH under nvm"
+          done
+
+      - name: Assert the uv channel installed
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          [ -x "$FAKE_HOME/.local/bin/uv" ] || fail "uv did not bootstrap into the home"
+          env HOME="$FAKE_HOME" PATH="$FAKE_HOME/.local/bin:$PATH" uv tool list \
+            | grep -q code-review-graph || fail "code-review-graph is not an installed uv tool"
+
+      - name: Assert the skill set restored
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          count="$(find "$FAKE_HOME/.agents/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+          [ "$count" -eq 13 ] || fail "expected 13 restored skills, found $count"
+          [ -d "$FAKE_HOME/projects/bdk/.git" ] || fail "the bdk marketplace was not cloned"
+
+      # The hooks are the reason `settings.json` is merged rather than copied. This
+      # is the only place that proves each tool's installer still exists and still
+      # takes the arguments the script passes it.
+      #
+      # herdr is expected to be absent: no install channel declares it, so its hook
+      # is skipped. That is tracked as an open question, not as a test gap.
+      - name: Assert each tool installed its own hook
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          s="$FAKE_HOME/.claude/settings.json"
+
+          echo "--- hooks block as written by the tools ---"
+          jq '.hooks' "$s"
+
+          jq -e '.hooks | length > 0' "$s" >/dev/null \
+            || fail "no tool installed a hook; settings.json has no hooks block"
+
+          for tool in atuin rtk gh-axi chrome-devtools-axi; do
+            jq -e --arg t "$tool" \
+              '[.hooks[][]? | .hooks[]? | .command // ""] | map(select(contains($t))) | length > 0' \
+              "$s" >/dev/null || fail "$tool did not install its hook"
+          done
+
+          jq -e '.autoMode // "absent" | . == "absent"' "$s" >/dev/null \
+            || echo "note: autoMode appeared, which only Claude Code writes"

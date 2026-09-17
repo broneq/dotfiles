@@ -33,10 +33,13 @@ pass() {
 # scratch files are not the repository's problem, and the behaviour is identical
 # locally and in CI.
 #
-# `scripts/check.sh` is excluded from the content checks because it has to contain
-# the very patterns it searches for.
+# Two files are excluded from the content checks because both have to contain the
+# very patterns they search for: this script, and check-negative.sh, which plants
+# each violation in turn to prove these checks still fire.
 grep_tracked() {
-	git grep -n -E "$1" -- . ':(exclude)scripts/check.sh' >"$tmp/hits" 2>/dev/null
+	git grep -n -E "$1" -- . \
+		':(exclude)scripts/check.sh' \
+		':(exclude)scripts/check-negative.sh' >"$tmp/hits" 2>/dev/null
 }
 
 report() {
@@ -63,7 +66,8 @@ fi
 # On `managed` there are no admin rights, so sudo hangs on a password prompt the
 # user cannot satisfy. Detect the condition and fail loudly instead.
 if git grep -n -E '(^|[^[:alnum:]_-])sudo[[:space:]]' -- \
-	'*.sh' '*.bash' '*.sh.tmpl' '*.bash.tmpl' ':(exclude)scripts/check.sh' \
+	'*.sh' '*.bash' '*.sh.tmpl' '*.bash.tmpl' \
+	':(exclude)scripts/check.sh' ':(exclude)scripts/check-negative.sh' \
 	>"$tmp/hits" 2>/dev/null; then
 	report "sudo call in a script (managed machines have no admin rights):"
 else
@@ -77,7 +81,8 @@ fi
 # Scoped to executable files: prose in *.md documents the rule and must be able to
 # name the flags it forbids.
 if git grep -n -E 'brew[[:space:]]+bundle.*(--cleanup|--force)' -- \
-	'*.sh' '*.bash' '*.sh.tmpl' '*.bash.tmpl' 'Brewfile*' ':(exclude)scripts/check.sh' \
+	'*.sh' '*.bash' '*.sh.tmpl' '*.bash.tmpl' 'Brewfile*' \
+	':(exclude)scripts/check.sh' ':(exclude)scripts/check-negative.sh' \
 	>"$tmp/hits" 2>/dev/null; then
 	report "brew bundle --cleanup/--force (removes MDM-deployed software):"
 else
@@ -107,7 +112,9 @@ fi
 
 # --- 5. shellcheck ------------------------------------------------------------
 # Chezmoi templates are not valid shell until rendered, so they are skipped here.
-# Roadmap phase 6 renders them with `chezmoi execute-template` first.
+# scripts/check-templates.sh renders them under both profiles and shellchecks the
+# result; it is separate because it needs chezmoi, and this script must run on a
+# machine where nothing is installed yet.
 if [ "$shell_count" -gt 0 ]; then
 	if ! command -v shellcheck >/dev/null 2>&1; then
 		fail "shellcheck is not installed - 'brew install shellcheck'"
@@ -122,7 +129,7 @@ fi
 
 if [ "$template_count" -gt 0 ]; then
 	printf ' \033[33m--\033[0m %s\n' \
-		"$template_count script template(s) not shellchecked; rendered in CI"
+		"$template_count script template(s) skipped here; run scripts/check-templates.sh"
 fi
 
 # --- 6. Secret scan -----------------------------------------------------------

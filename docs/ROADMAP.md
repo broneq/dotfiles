@@ -483,11 +483,47 @@ is the phase most likely to need iteration.
 - [x] Add an assertion that the skill restore keeps `writing-hookify-rules` under
       that name and clones `bdk` over HTTPS (defect 13)
 
+### Phase 6b: tests that confirm something
+
+The suite above was thirteen assertions of which three carried signal; the rest
+restated that chezmoi works. This closes that gap and the phase's negative
+criterion.
+
+- [x] Move the template render out of the workflow into
+      `scripts/check-templates.sh`, so it can be run by hand and planted against
+- [x] `scripts/check-negative.sh`: eight mutations plus a clean-tree control.
+      Each asserts the exit status **and** the message, because exit 1 can come
+      from any of the six checks. Verified in both directions on 2026-09-17:
+      every mutation is caught, and neutering one check in `check.sh` turns the
+      suite red on exactly that case
+- [x] Two of those mutations are broken templates, one rendering into invalid
+      shell and one failing to render. **This is the phase's negative criterion**
+- [x] Run every job against `env HOME="$fake"` instead of `--destination`. The
+      install scripts address the machine through `$HOME`, so nothing else can
+      ever execute them; it also un-circularises the `bdk` path assertion, which
+      was comparing `.chezmoi.homeDir` against the runner's own home
+- [x] Seed the destination with a `settings.json` carrying `hooks`, `autoMode`,
+      a foreign key and a colliding `model`. On an empty `HOME` the half of
+      `modify_settings.json.tmpl` that preserves other authors never ran
+- [x] Assert a second apply changes nothing, and that the merged `settings.json`
+      is byte-identical across applies
+- [x] Assert the git identity actually switches, by comparing against the other
+      profile's render rather than a literal address
+- [x] Execute the skill restore rather than grepping its rendered text: thirteen
+      directories with `SKILL.md`, thirteen resolving symlinks, the `bdk` clone
+- [x] Check every declared package name against its registry: `brew info`,
+      `brew info --cask`, `npm view`, the PyPI API. Seconds, installs nothing,
+      and catches the typo that today only surfaces mid-`brew bundle`
+- [x] `-e` as well as `-L` on every symlink assertion; a link to nothing passed
+- [ ] `.github/workflows/install.yml`: weekly and on demand, no
+      `--exclude=scripts`, on a runner that is genuinely a clean Mac. Written,
+      not yet run
+
 **Done when:** CI is green on GitHub and a deliberately broken template turns it
-red. Corrected 2026-09-17: `main` is pushed and all three jobs are green on
-`macos-latest`. The negative half is still unverified - nothing has yet confirmed
-that a deliberately broken template turns CI red - so the phase stays open on that
-one criterion.
+red. Corrected 2026-09-17: `main` is pushed, the fast workflow is green on
+`macos-latest`, and the negative half is now covered by `check-negative.sh` rather
+than by nothing. The phase stays open on one item: `install.yml` has been written
+but never executed, so no install script has run anywhere yet.
 
 ---
 
@@ -594,3 +630,7 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-17 | The skill directory name is the slugified lock file key, not the upstream path | The two agree for twelve of thirteen skills, which is the worst possible failure shape: a path-derived name quietly renames `writing-hookify-rules` to `writing-rules` and nothing complains. CI now asserts that single case, because it is the only one that can regress |
 | 2026-09-17 | The profile prompt text is three words, with the explanation moved to README | The prompt string is also the `--promptChoice` lookup key, and the flag parses comma-separated `key=value` pairs. A descriptive prompt containing a comma and an `=` cannot be answered non-interactively under any key, which is what made CI unrunnable |
 | 2026-09-17 | Repository is public, reversing "Repository stays private" earlier the same day | Asked at the point of the first push, with the remote still empty and nothing yet published, and answered by the owner. The tradeoff is unchanged and was accepted rather than missed: the tree enumerates an MDM-managed machine's tooling, names Mosyle, and records that the account has no admin rights. What changes is that the no-secrets rule stops being a precaution and becomes the only thing standing between this repository and publication, so `check.sh`'s secret tripwire is now load-bearing |
+| 2026-09-17 | Every CI job runs against `env HOME="$fake"`, not `--destination` | The install scripts address the machine through `$HOME`, so a job that only moves the destination can never execute them - which is why they had never run anywhere. It also un-circularises the `bdk` path assertion: `.chezmoi.homeDir` does not follow `--destination`, so that check was comparing the runner's own home against itself |
+| 2026-09-17 | `scripts/check-negative.sh` mutates a throwaway clone and asserts the message, not just the exit status | A gate passing on a clean tree is not evidence; one with every check accidentally disabled passes identically. Exit 1 alone is not evidence either, because it could come from any of the six checks, so a mutation tripping the wrong one would read as a pass. Verified in both directions: neutering one check turns the suite red on exactly that case |
+| 2026-09-17 | The template render moved from the workflow into `scripts/check-templates.sh` | Twenty lines of bash inside YAML cannot be run by hand, which contradicts "everything mechanically checkable lives in scripts/", and cannot be planted against by a negative test. Kept separate from `check.sh` because that one has to run on a machine where chezmoi is not installed yet |
+| 2026-09-17 | The heavy install test is a separate weekly workflow, not a step in the fast one | Tens of minutes against seconds. Merging them makes the fast gate slow and the slow gate noisy. Weekly plus `workflow_dispatch` also means upstream regressions - a renamed formula, changed installer arguments - surface on their own rather than waiting for someone to remember |

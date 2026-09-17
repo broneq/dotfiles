@@ -82,14 +82,30 @@ Four things are deliberately manual. Each one is a decision, not an omission.
 
 ## Verification
 
+Three gates, all runnable by hand. CI runs the same three.
+
 ```sh
-./scripts/check.sh            # always; the mechanical rules
+./scripts/check.sh            # mechanical rules; needs nothing installed
+./scripts/check-templates.sh  # renders every template under both profiles, shellchecks it
+./scripts/check-negative.sh   # plants each violation in turn, asserts the gates catch it
+
 chezmoi diff
 chezmoi apply --dry-run -v
 ```
 
-CI runs `scripts/check.sh`, shellchecks the rendered script templates, and applies
-the whole tree into a throwaway `HOME` under both profiles. It does **not** run the
-install scripts: `--exclude=scripts` keeps `brew bundle`, the npm globals, the uv
-tools, the skill clones and the hook installers out of every run. They are rendered
-and shellchecked, never executed. Their first real run is on a machine.
+`check-negative.sh` exists because the other two passing says nothing on its own:
+a gate with every check accidentally disabled passes just as cleanly.
+
+Two workflows:
+
+- **`test.yml`**, on every push and pull request, seconds. The three gates, then an
+  apply into a throwaway `HOME` under both profiles, a `settings.json` seeded with
+  what the other two authors write, a second apply that must change nothing, the
+  skill restore executed for real, and every declared package name checked against
+  its registry. It does **not** run the install scripts.
+- **`install.yml`**, weekly and on demand, tens of minutes. The fresh-machine test:
+  the same apply with the install scripts included, on a runner that really is a
+  clean Mac. It is the only thing that executes `brew bundle`, the npm globals, the
+  uv bootstrap and the five hook installers.
+
+Documentation-only edits need `scripts/check.sh` and nothing else.
