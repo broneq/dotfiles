@@ -1,0 +1,118 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: guardrails and shellcheck
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install chezmoi and shellcheck
+        run: brew install chezmoi shellcheck
+
+      - name: Mechanical guardrails
+        run: ./scripts/check.sh
+
+      # check.sh skips *.sh.tmpl because a chezmoi template is not valid shell
+      # until it is rendered. Render both profiles and shellcheck the output: a
+      # template can be syntactically fine on one branch and broken on the other.
+      - name: Shellcheck rendered script templates
+        run: |
+          set -euo pipefail
+          rendered="$(mktemp -d)"
+          status=0
+          for profile in managed owned; do
+            for tmpl in home/.chezmoiscripts/*.sh.tmpl home/dot_claude/modify_settings.json.tmpl; do
+              name="$(basename "${tmpl%.tmpl}")"
+              out="$rendered/$profile-$name"
+              chezmoi execute-template \
+                --init --promptChoice "profile=$profile" \
+                --source . <"$tmpl" >"$out"
+              # modify_settings.json.tmpl is POSIX sh; the rest is bash.
+              case "$name" in
+                modify_*) shellcheck --shell=sh "$out" || status=1 ;;
+                *)        shellcheck --shell=bash "$out" || status=1 ;;
+              esac
+            done
+          done
+          exit "$status"
+
+  apply:
+    name: apply (${{ matrix.profile }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [managed, owned]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install chezmoi
+        run: brew install chezmoi
+
+      # --exclude=scripts is what keeps this job honest AND fast: the run_onchange_
+      # scripts install 29 formulae, which buys nothing here and costs minutes. The
+      # rendered Brewfile is asserted separately below.
+      - name: Apply into a throwaway HOME
+        run: |
+          set -euo pipefail
+          fake="$(mktemp -d)"
+          chezmoi init --source . \
+            --promptChoice "profile=${{ matrix.profile }}" \
+            --destination "$fake" --no-tty
+          chezmoi apply --source . --destination "$fake" \
+            --config "$fake/.config/chezmoi/chezmoi.toml" \
+            --exclude=scripts --no-tty
+          echo "FAKE_HOME=$fake" >>"$GITHUB_ENV"
+
+      - name: Assert the destination looks right
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          [ -L "$FAKE_HOME/.config/nvim" ]    || fail ".config/nvim is not a symlink"
+          [ -L "$FAKE_HOME/.config/wezterm" ] || fail ".config/wezterm is not a symlink"
+          [ -f "$FAKE_HOME/.zshrc" ]          || fail ".zshrc missing"
+          [ -f "$FAKE_HOME/.claude/settings.json" ] || fail "settings.json missing"
+
+          # settings.json is produced by a modify_ script, so assert the merge did
+          # what it claims: our key is present with the path resolved against this
+          # HOME, and no hook file was written by chezmoi.
+          jq -e '.extraKnownMarketplaces.bdk.source.path == $p' \
+            --arg p "$FAKE_HOME/projects/bdk" \
+            "$FAKE_HOME/.claude/settings.json" >/dev/null \
+            || fail "bdk marketplace path was not merged in"
+          [ ! -e "$FAKE_HOME/.claude/hooks" ] || fail "chezmoi wrote a hook file; tools own those"
+
+          # The .claude directory holds gigabytes of runtime state. Only authored files may appear.
+          count="$(find "$FAKE_HOME/.claude" -type f | wc -l | tr -d ' ')"
+          [ "$count" -eq 3 ] || fail "expected 3 authored files under .claude, found $count"
+
+      - name: Assert the profile split diverges
+        run: |
+          set -euo pipefail
+          brewfile="$(chezmoi execute-template --init \
+            --promptChoice "profile=${{ matrix.profile }}" --source . \
+            <home/.chezmoiscripts/run_onchange_10-brew.sh.tmpl)"
+
+          echo "$brewfile" | grep -q 'brew "chezmoi"' \
+            || { echo "::error::chezmoi missing from the rendered Brewfile"; exit 1; }
+          echo "$brewfile" | grep -q 'brew "shellcheck"' \
+            || { echo "::error::shellcheck missing from the rendered Brewfile"; exit 1; }
+
+          if [ "${{ matrix.profile }}" = managed ]; then
+            echo "$brewfile" | grep -q 'cask_args appdir:' \
+              || { echo "::error::managed must pin casks to ~/Applications"; exit 1; }
+          else
+            echo "$brewfile" | grep -q 'cask_args appdir:' \
+              && { echo "::error::owned must not override appdir"; exit 1; }
+          fi
+          exit 0
