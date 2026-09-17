@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Local tool state, never shared between machines
+.bdk/
+.code-review-graph/
+.no-mistakes/
+
+# Runtime artifacts of symlinked configs (phase 2 onwards)
+live/**/*.log
+live/**/*.sock
+live/**/session.json
