@@ -10,9 +10,10 @@ last.
 Status legend: `[ ]` not started, `[~]` in progress, `[x]` done.
 
 `[~]` is the honest state for most of what was written on 2026-09-17. Corrected
-twice the same day: the tree has now been executed, but only its file layer, and
-only against throwaway destinations. CI has run on `macos-latest` and is green,
-which makes the file layer genuinely fresh-machine tested. `chezmoi` was installed on the `managed` machine and `chezmoi init`
+three times the same day. The file layer is genuinely fresh-machine tested: it is
+applied on `macos-latest` on every push and is green. The install scripts have now
+run too, once, in `install.yml` - six of its seven steps passed and the seventh
+found two defects. Nothing has yet been applied to a real machine. `chezmoi` was installed on the `managed` machine and `chezmoi init`
 plus `chezmoi apply --exclude=scripts` were run into temporary directories under
 both profiles, which is what found the defects listed under "Defects found by the
 first execution". **No install script has ever run**: no `brew bundle`, no npm
@@ -252,6 +253,35 @@ errored, nothing was red, and the output looked plausible. All five are fixed.
    only makes the `prompt*` functions callable. Every `.profile` and `.packages`
    reference under it errors, which is what the CI lint step was built on. Fix: CI
    generates a real config with `init --config-path` and renders with `--config`.
+
+### Defects found by the first install run
+
+Surveyed 2026-09-17 from the first `install.yml` run, which is the first time any
+install script executed anywhere. Six of its seven steps passed: `brew bundle` with
+29 formulae and 3 casks, `WezTerm.app` landing in the right directory under both
+profiles, the npm globals resolving under nvm, the uv bootstrap, and the skill
+restore. The hooks step failed, and took two defects with it. Both, again, produce
+a zero exit and a reassuring message.
+
+16. **`rtk init --global` asks a question and answers it `N`.** With no TTY it
+   prints "Patch existing settings.json? [y/N]", defaults to no, prints a MANUAL
+   STEP block for a human to paste, and **exits 0**. The hooks script recorded
+   `hook: rtk` and no hook existed. Feeding `y` on stdin does not help - rtk
+   detects the non-interactive session, not the empty terminal. Fix: the
+   `--auto-patch` flag, verified idempotent and non-destructive to the other
+   authors' keys.
+17. **The hooks script did not source nvm.** `gh-axi` and `chrome-devtools-axi`
+   are npm globals under the nvm-managed node, which is not on `PATH` during a
+   non-interactive `chezmoi apply`. Both were reported as
+   "not installed, skipping", a line indistinguishable from the legitimate herdr
+   one. Fix: source nvm the way `30-npm-global` does, before the installers run.
+   Verified locally by running scripts 30 and 60 in sequence with `PATH` stripped
+   of every nvm directory.
+
+   The same assignment pattern in `30-npm-global` carried a latent version of this:
+   under `set -e`, `nvm_sh="$(brew --prefix 2>/dev/null)/..."` takes brew's exit
+   status, so a missing brew aborted the script instead of reaching the actionable
+   message below it. Guarded in both.
 
 ---
 
@@ -515,15 +545,18 @@ criterion.
       `brew info --cask`, `npm view`, the PyPI API. Seconds, installs nothing,
       and catches the typo that today only surfaces mid-`brew bundle`
 - [x] `-e` as well as `-L` on every symlink assertion; a link to nothing passed
-- [ ] `.github/workflows/install.yml`: weekly and on demand, no
-      `--exclude=scripts`, on a runner that is genuinely a clean Mac. Written,
-      not yet run
+- [x] `.github/workflows/install.yml`: weekly and on demand, no
+      `--exclude=scripts`, on a runner that is genuinely a clean Mac
+- [x] First run, 2026-09-17. Six of seven steps green on both profiles, which is
+      the first evidence that the install path works at all. The hooks step found
+      defects 16 and 17
+- [ ] Green `install.yml` after the fixes for defects 16 and 17
 
 **Done when:** CI is green on GitHub and a deliberately broken template turns it
-red. Corrected 2026-09-17: `main` is pushed, the fast workflow is green on
-`macos-latest`, and the negative half is now covered by `check-negative.sh` rather
-than by nothing. The phase stays open on one item: `install.yml` has been written
-but never executed, so no install script has run anywhere yet.
+red. Corrected twice on 2026-09-17: `main` is pushed, the fast workflow is green on
+`macos-latest`, and the negative half is covered by `check-negative.sh` rather than
+by nothing. The phase stays open on one item: `install.yml` has run once and found
+two real defects, so it has yet to be green.
 
 ---
 
@@ -634,3 +667,4 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-17 | `scripts/check-negative.sh` mutates a throwaway clone and asserts the message, not just the exit status | A gate passing on a clean tree is not evidence; one with every check accidentally disabled passes identically. Exit 1 alone is not evidence either, because it could come from any of the six checks, so a mutation tripping the wrong one would read as a pass. Verified in both directions: neutering one check turns the suite red on exactly that case |
 | 2026-09-17 | The template render moved from the workflow into `scripts/check-templates.sh` | Twenty lines of bash inside YAML cannot be run by hand, which contradicts "everything mechanically checkable lives in scripts/", and cannot be planted against by a negative test. Kept separate from `check.sh` because that one has to run on a machine where chezmoi is not installed yet |
 | 2026-09-17 | The heavy install test is a separate weekly workflow, not a step in the fast one | Tens of minutes against seconds. Merging them makes the fast gate slow and the slow gate noisy. Weekly plus `workflow_dispatch` also means upstream regressions - a renamed formula, changed installer arguments - surface on their own rather than waiting for someone to remember |
+| 2026-09-17 | CI asserts each hook is present in `settings.json`, not that its installer exited 0 | Three of the five installers can succeed while installing nothing: rtk answers its own prompt with N and exits 0, and the two npm globals are simply absent from a non-interactive `PATH`, which reads identically to the legitimate herdr skip. An exit-status check would have passed on all three |

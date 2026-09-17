@@ -66,9 +66,10 @@ has the key-by-key split.
 ### Hooks belong to their tools
 
 Not one hook file is versioned. Four of the five Claude Code hooks are installed
-by a bare command on `PATH` - `atuin hook install claude-code`, `rtk init --global`,
-`gh-axi setup hooks`, `chrome-devtools-axi setup hooks` - with nothing on disk to
-reproduce. The fifth, herdr,
+by a bare command on `PATH` - `atuin hook install claude-code`,
+`rtk init --global --auto-patch`, `gh-axi setup hooks`,
+`chrome-devtools-axi setup hooks` - with nothing on disk to reproduce. The fifth,
+herdr,
 ships a script, and that one file was the source of four separate problems: it
 forced an absolute path into `settings.json`, it is vendor-managed so
 `chezmoi apply` would revert herdr's own upgrade, it is POSIX `sh` and could not
@@ -86,6 +87,24 @@ So `run_after_60-agent-hooks.sh.tmpl` calls each tool's own installer instead. T
 declaration did not disappear, it changed form: `packages.yaml` says which tools
 exist, the script says how each one installs its hook, and both are executable
 rather than a snapshot.
+
+Two details of that script are not obvious and both were found by the first
+`install.yml` run, because both fail with a zero exit and a reassuring message:
+
+- **`rtk` needs `--auto-patch`.** Without it, `rtk init --global` asks "Patch
+  existing settings.json? [y/N]", answers itself `N` because there is no TTY,
+  prints a MANUAL STEP block telling a human what to paste, and **exits 0**. The
+  caller records a success and no hook exists. Feeding `y` on stdin does not help;
+  rtk detects the non-interactive session, not the empty terminal.
+- **The script has to source nvm.** Two of the five tools are npm globals under
+  the nvm-managed node, which is not on `PATH` in a non-interactive `chezmoi
+  apply`. Without sourcing it, `command -v` finds neither and both are reported as
+  "not installed, skipping". It looks identical to the herdr line, which is
+  legitimate.
+
+This is also why the CI assertion checks `settings.json` for each tool's hook
+rather than checking that the installer exited 0. Three of the five would have
+passed an exit-status check while installing nothing.
 
 This one script is `run_after_`, not `run_onchange_after_`, and it is the only
 exception in the tree. A `run_onchange_` script re-runs when its own rendered text

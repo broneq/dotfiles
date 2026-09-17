@@ -12,9 +12,16 @@
 set -euo pipefail
 
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-nvm_sh="$(brew --prefix 2>/dev/null)/opt/nvm/nvm.sh"
 
-if [ ! -s "$nvm_sh" ]; then
+# Guarded rather than inlined: under `set -e` an assignment carries the exit status
+# of its command substitution, so a missing brew would abort here instead of
+# reaching the actionable message below.
+nvm_sh=""
+if command -v brew >/dev/null 2>&1; then
+	nvm_sh="$(brew --prefix)/opt/nvm/nvm.sh"
+fi
+
+if [ -z "$nvm_sh" ] || [ ! -s "$nvm_sh" ]; then
 	printf 'nvm not found at %s - skipping npm globals.\n' "$nvm_sh" >&2
 	printf 'It is declared in packages.yaml; re-run chezmoi apply after brew finishes.\n' >&2
 	exit 0

@@ -17,6 +17,21 @@ set -euo pipefail
 # upgraded would keep serving the hook version it shipped with on day one. All
 # five installers are idempotent and cheap, so running them on every apply is both
 # safe and the only form that actually tracks the tools.
+# Two of the five tools are npm globals under the nvm-managed node, which is not on
+# PATH unless nvm has been sourced. Without this, `command -v` finds neither and
+# both are reported as "not installed, skipping" - silently, with a zero exit. The
+# first install.yml run is what surfaced it.
+nvm_sh=""
+if command -v brew >/dev/null 2>&1; then
+	nvm_sh="$(brew --prefix)/opt/nvm/nvm.sh"
+fi
+if [ -n "$nvm_sh" ] && [ -s "$nvm_sh" ]; then
+	# shellcheck disable=SC1090  # path is resolved at runtime, not knowable statically
+	. "$nvm_sh"
+	nvm use --silent default >/dev/null 2>&1 ||
+		nvm use --silent node >/dev/null 2>&1 || true
+fi
+
 install_hook() {
 	local tool="$1"
 	shift
@@ -33,6 +48,10 @@ install_hook() {
 
 install_hook herdr              herdr integration install claude
 install_hook atuin              atuin hook install claude-code
-install_hook rtk                rtk init --global
+# --auto-patch is not optional. Without it rtk asks "Patch existing settings.json?
+# [y/N]", answers itself with N because there is no TTY, prints a MANUAL STEP
+# block - and exits 0, so the caller records a success and no hook exists. Feeding
+# it "y" on stdin does not help; the flag is the only way.
+install_hook rtk                rtk init --global --auto-patch
 install_hook gh-axi             gh-axi setup hooks
 install_hook chrome-devtools-axi chrome-devtools-axi setup hooks
