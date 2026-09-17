@@ -1,0 +1,65 @@
+# One source of truth for every package this toolbox installs.
+#
+# Scripts in .chezmoiscripts/ consume this file and contain no package names of
+# their own. Adding a tool is a one-line change here, never a shell edit.
+#
+# A tool this repository depends on must be declared here even when it is already
+# present as some other formula's dependency. Transitive presence disappears the
+# moment the parent does - see `shellcheck` below.
+
+packages:
+  homebrew:
+    # Leaves only: the set `brew leaves` returns, not the full dependency closure.
+    # `brew list --formula` returns 134 entries and is not what belongs here.
+    formulae:
+      - actionlint
+      - atuin           # shell history; was a standalone install in ~/.atuin
+      - beads
+      - bun             # settings.json runs `bunx -y ccstatusline@latest`
+      - chezmoi         # this repository's own engine; see README bootstrap
+      - colima
+      - docker
+      - docker-buildx
+      - docker-compose
+      - fd              # snacks.picker file backend; without it the picker is dead
+      - gh
+      - git-filter-repo
+      - go
+      - graphviz
+      - hey
+      - htop
+      - midnight-commander
+      - mkcert
+      - neovim
+      - nvm
+      - pandoc
+      - poppler
+      - python@3.14
+      - ripgrep         # snacks grep backend; without it `<leader>s` finds nothing
+      - rtk
+      - shellcheck      # scripts/check.sh gates on it; was only actionlint's dep
+      - tree
+      - watch
+      - whistle
+
+    casks:
+      # Fonts and other user-level casks unpack into ~/Library and need no appdir
+      # override, so they install identically on both profiles.
+      user_level:
+        - font-jetbrains-mono-nerd-font
+      # Application bundles. On `managed` there are no admin rights, so these must
+      # target ~/Applications via `cask_args appdir:` in the rendered Brewfile.
+      app_bundle:
+        - opensuperwhisper
+        - wezterm
+
+  # Pinned under the nvm-managed node until roadmap phase 7 moves them to mise.
+  npm:
+    - chrome-devtools-axi
+    - gh-axi
+    - lavish-axi
+    - quota-axi
+    - tasks-axi
+
+  uv:
+    - code-review-graph

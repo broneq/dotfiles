@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#
+# Python CLI tools installed as isolated uv tools.
+#
+# uv itself is a standalone binary in ~/.local/bin, not a Homebrew formula, so it
+# has to bootstrap itself. That curl is the only script this repository downloads
+# and executes; it is confined to this one guarded branch.
+
+set -euo pipefail
+
+if ! command -v uv >/dev/null 2>&1; then
+	if [ -x "$HOME/.local/bin/uv" ]; then
+		export PATH="$HOME/.local/bin:$PATH"
+	else
+		printf 'uv not found - bootstrapping from astral.sh\n'
+		curl -LsSf https://astral.sh/uv/install.sh | sh
+		export PATH="$HOME/.local/bin:$PATH"
+	fi
+fi
+
+if ! command -v uv >/dev/null 2>&1; then
+	printf 'uv bootstrap failed; not installing uv tools.\n' >&2
+	exit 1
+fi
+
+{{ range .packages.uv -}}
+uv tool install --upgrade "{{ . }}"
+{{ end -}}

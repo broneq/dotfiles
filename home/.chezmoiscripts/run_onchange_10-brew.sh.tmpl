@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#
+# Render a Brewfile from .chezmoidata/packages.yaml and hand it to `brew bundle`.
+#
+# Never --cleanup and never --force. MDM pushes software onto the `managed`
+# machine and this script cannot tell "mine, obsolete" from "deployed by IT".
+# Convergence-with-removal is not safe to write unconditionally, so it is not
+# written at all. scripts/check.sh enforces that.
+#
+# The package list is templated into the heredoc below, so this script's own text
+# changes whenever packages.yaml changes, which is what re-triggers run_onchange.
+
+set -euo pipefail
+
+if ! command -v brew >/dev/null 2>&1; then
+	printf 'brew not found. Install Homebrew first, then re-run chezmoi apply.\n' >&2
+	exit 1
+fi
+
+brewfile="$(mktemp)"
+trap 'rm -f "$brewfile"' EXIT
+
+cat >"$brewfile" <<'BREWFILE'
+{{ if eq .profile "managed" -}}
+# No admin rights on this profile: application bundles cannot be written to
+# /Applications. `brew bundle` has no --appdir flag; cask_args is the mechanism.
+cask_args appdir: "{{ .chezmoi.homeDir }}/Applications"
+{{ end }}
+{{ range .packages.homebrew.formulae -}}
+brew "{{ . }}"
+{{ end -}}
+{{ range .packages.homebrew.casks.user_level -}}
+cask "{{ . }}"
+{{ end -}}
+{{ range .packages.homebrew.casks.app_bundle -}}
+cask "{{ . }}"
+{{ end -}}
+BREWFILE
+
+# `install` is named explicitly: bare `brew bundle` changed meaning across
+# Homebrew majors, and --no-lock was removed in Homebrew 7.
+brew bundle install --file="$brewfile"

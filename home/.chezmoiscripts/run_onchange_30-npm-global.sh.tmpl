@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#
+# Global npm packages, installed under the nvm-managed node.
+#
+# These five tools resolve from ~/.nvm/versions/node/<version>/lib. Installing
+# them under whichever node happens to be first on PATH would scatter them across
+# the two or three node installations this machine currently has, so the nvm
+# environment is loaded explicitly rather than assumed.
+#
+# Roadmap phase 7 replaces all of this with mise. Until then, this is the channel.
+
+set -euo pipefail
+
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+nvm_sh="$(brew --prefix 2>/dev/null)/opt/nvm/nvm.sh"
+
+if [ ! -s "$nvm_sh" ]; then
+	printf 'nvm not found at %s - skipping npm globals.\n' "$nvm_sh" >&2
+	printf 'It is declared in packages.yaml; re-run chezmoi apply after brew finishes.\n' >&2
+	exit 0
+fi
+
+# shellcheck disable=SC1090  # path is resolved at runtime, not knowable statically
+. "$nvm_sh"
+
+# `nvm install` with no argument honours .nvmrc; there is none, so ask for the
+# version nvm already considers default and fall back to the latest LTS.
+nvm use --silent default >/dev/null 2>&1 || nvm install --lts
+
+npm install --global --no-fund --no-audit{{ range .packages.npm }} "{{ . }}"{{ end }}
