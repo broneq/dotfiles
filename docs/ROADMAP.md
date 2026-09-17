@@ -9,9 +9,10 @@ last.
 
 Status legend: `[ ]` not started, `[~]` in progress, `[x]` done.
 
-`[~]` is the honest state for everything written on 2026-09-17. Corrected the same
-day: the tree has now been executed, but only partially and only against throwaway
-destinations. `chezmoi` was installed on the `managed` machine and `chezmoi init`
+`[~]` is the honest state for most of what was written on 2026-09-17. Corrected
+twice the same day: the tree has now been executed, but only its file layer, and
+only against throwaway destinations. CI has run on `macos-latest` and is green,
+which makes the file layer genuinely fresh-machine tested. `chezmoi` was installed on the `managed` machine and `chezmoi init`
 plus `chezmoi apply --exclude=scripts` were run into temporary directories under
 both profiles, which is what found the defects listed under "Defects found by the
 first execution". **No install script has ever run**: no `brew bundle`, no npm
@@ -456,19 +457,19 @@ is the phase most likely to need iteration.
 
 - [x] Create the GitHub repository and push `main`. Created public, not private,
       by the owner's decision on 2026-09-17; see the decisions log
-- [~] `.github/workflows/test.yml` on `macos-latest`
-- [~] Job 1: `./scripts/check.sh`
-- [~] Extend Job 1 to shellcheck the `*.sh.tmpl` scripts too, by rendering them
+- [x] `.github/workflows/test.yml` on `macos-latest`
+- [x] Job 1: `./scripts/check.sh`
+- [x] Extend Job 1 to shellcheck the `*.sh.tmpl` scripts too, by rendering them
       with `chezmoi execute-template` first - under **both** profiles, because a
       template can be valid on one branch and broken on the other
-- [~] Job 2: `chezmoi apply` into a throwaway `HOME` with `profile=managed`, then
+- [x] Job 2: `chezmoi apply` into a throwaway `HOME` with `profile=managed`, then
       assert the expected symlinks and files exist, plus the `~/.claude` file count
-- [~] Job 3: same with `profile=owned`, asserting the profile split diverges. Both
+- [x] Job 3: same with `profile=owned`, asserting the profile split diverges. Both
       run from one matrix
-- [~] Do not install the full package set in CI; assert the rendered Brewfile
+- [x] Do not install the full package set in CI; assert the rendered Brewfile
       instead, via `--exclude=scripts`. Installing 29 formulae per run buys little
       and costs minutes
-- [~] Rewritten 2026-09-17 after the first local execution. As authored, **no job
+- [x] Rewritten 2026-09-17 after the first local execution. As authored, **no job
       in this workflow could have passed**: all three `--promptChoice` call sites
       used the wrong key (defect 11), the lint job rendered with
       `execute-template --init`, which supplies no data at all (defect 15), `init`
@@ -476,16 +477,17 @@ is the phase most likely to need iteration.
       because `--config-path` was missing, and the `bdk` marketplace assertion
       compared against `$FAKE_HOME` although `.chezmoi.homeDir` does not follow
       `--destination`
-- [~] Add assertions for the two defects that produce a plausible-looking result:
+- [x] Add assertions for the two defects that produce a plausible-looking result:
       that the profile prompt was actually answered, and that `init` recorded
       `sourceDir`
-- [~] Add an assertion that the skill restore keeps `writing-hookify-rules` under
+- [x] Add an assertion that the skill restore keeps `writing-hookify-rules` under
       that name and clones `bdk` over HTTPS (defect 13)
 
 **Done when:** CI is green on GitHub and a deliberately broken template turns it
-red. Both jobs were simulated locally on 2026-09-17 under both profiles and pass;
-that is not the same as green on `macos-latest`, and the repository still has no
-remote.
+red. Corrected 2026-09-17: `main` is pushed and all three jobs are green on
+`macos-latest`. The negative half is still unverified - nothing has yet confirmed
+that a deliberately broken template turns CI red - so the phase stays open on that
+one criterion.
 
 ---
 

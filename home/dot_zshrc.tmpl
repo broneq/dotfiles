@@ -21,10 +21,34 @@ export BUN_INSTALL="$HOME/.bun"
 
 # nvm. Roadmap phase 7 replaces this with mise; until then the five *-axi tools
 # resolve from here and this block is load-bearing.
+#
+# `--no-use` is the point of this block's shape. Sourcing nvm.sh plainly also runs
+# nvm_auto, which is `nvm use default` on every interactive shell: measured at
+# 1.1 s out of a 1.5 s startup, and paid again by every subshell a program spawns
+# (mc opens one per panel). `--no-use` skips it and leaves nvm a function to call
+# when a version actually needs switching.
 export NVM_DIR="$HOME/.nvm"
 if [ -n "${HOMEBREW_PREFIX:-}" ]; then
-	[ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && . "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"
+	[ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && . "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" --no-use
 	[ -s "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm" ] && . "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm"
+fi
+
+# With --no-use nothing put node on PATH, so do it here without nvm's resolver -
+# every entry point into that resolver costs the same 0.8 s the flag just saved.
+# The alias file holds whatever `nvm alias default` prints, a bare major ("24")
+# on both machines; the `n` glob qualifier sorts numerically, so [-1] is v24.21.0
+# and not v24.9.0. An alias the glob cannot expand (lts/*, a version never
+# installed) falls through to nvm itself: correct, and slow only in that case.
+if command -v nvm >/dev/null 2>&1; then
+	if read -r _nvm_default 2>/dev/null <"$NVM_DIR/alias/default"; then
+		_nvm_bin=("$NVM_DIR"/versions/node/"v${_nvm_default}"*/bin(N/n[-1]))
+	fi
+	if [ -n "${_nvm_bin[1]:-}" ]; then
+		export PATH="${_nvm_bin[1]}:$PATH"
+	else
+		nvm use --silent default >/dev/null 2>&1
+	fi
+	unset _nvm_default _nvm_bin
 fi
 
 # atuin: shell history. The env file exists only after a standalone install; the
