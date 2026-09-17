@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#
+# Restore the Claude Code agent skill set from .agents/.skill-lock.json.
+# See docs/IMPLEMENTATION.md, "Skill restore", for why it is shaped this way.
+
+set -euo pipefail
+
+# There is no `skills` CLI on either machine: the lock file is written by an
+# agent-side skill, not by a package manager, so restore has to be ours.
+#
+# The skill list is expanded into this script at template time, which means no jq
+# at runtime, no dependency on the lock file having reached the destination yet,
+# and a script whose own text changes when the lock file does - which is what
+# re-triggers run_onchange.
+#
+# Two skills in ~/.agents/skills have no lock entry (create-tasks-workspace,
+# no-mistakes) and are not restored here. See README.
+
+agents_dir="$HOME/.agents/skills"
+claude_dir="$HOME/.claude/skills"
+bdk_dir="$HOME/projects/bdk"
+failures=0
+
+if ! command -v git >/dev/null 2>&1; then
+	printf 'git not found; cannot restore skills.\n' >&2
+	exit 1
+fi
+
+mkdir -p "$agents_dir" "$claude_dir"
+
+cache="$(mktemp -d)"
+trap 'rm -rf "$cache"' EXIT
+
+# Four of the thirteen skills come from anthropics/claude-code. Cloning per skill
+# would fetch the same repository four times.
+clone_once() {
+	local url slug dest
+	url="$1"
+	slug="$(printf '%s' "$url" | tr -c 'A-Za-z0-9' '_')"
+	dest="$cache/$slug"
+	if [ ! -d "$dest" ]; then
+		git clone --quiet --depth 1 --filter=blob:none "$url" "$dest" >/dev/null 2>&1 || return 1
+	fi
+	printf '%s\n' "$dest"
+}
+
+install_skill() {
+	local url skill_path folder checkout src
+	url="$1"
+	skill_path="$2"
+	# The lock file keys are display names ("Agent Development"); the directory on
+	# disk is the parent of SKILL.md ("agent-development"). Use the path, not the key.
+	folder="$(basename "$(dirname "$skill_path")")"
+
+	if ! checkout="$(clone_once "$url")"; then
+		printf 'skill %s: clone of %s failed\n' "$folder" "$url" >&2
+		failures=$((failures + 1))
+		return 0
+	fi
+
+	src="$checkout/$(dirname "$skill_path")"
+	if [ ! -d "$src" ]; then
+		printf 'skill %s: %s is not in %s\n' "$folder" "$skill_path" "$url" >&2
+		failures=$((failures + 1))
+		return 0
+	fi
+
+	rm -rf "${agents_dir:?}/$folder"
+	cp -R "$src" "$agents_dir/$folder"
+	ln -sfn "../../.agents/skills/$folder" "$claude_dir/$folder"
+	printf 'skill %s\n' "$folder"
+}
+
+{{ $lock := include "dot_agents/dot_skill-lock.json" | fromJson -}}
+{{ range $name, $skill := $lock.skills -}}
+install_skill "{{ $skill.sourceUrl }}" "{{ $skill.skillPath }}"
+{{ end }}
+# settings.json registers a plugin marketplace at a local directory. Without the
+# clone, every bdk plugin fails to load, with an error that does not name this as
+# the cause. Make the dependency explicit instead.
+if [ ! -d "$bdk_dir/.git" ]; then
+	printf 'plugin marketplace %s is missing; cloning\n' "$bdk_dir"
+	mkdir -p "$(dirname "$bdk_dir")"
+	if ! git clone --quiet git@github.com:broneq/bdk.git "$bdk_dir"; then
+		printf 'clone of bdk failed. It is an SSH remote, so this needs a key that\n' >&2
+		printf 'GitHub knows about. Clone it by hand and re-run chezmoi apply.\n' >&2
+		failures=$((failures + 1))
+	fi
+fi
+
+if [ "$failures" -gt 0 ]; then
+	printf '%d skill restore step(s) failed.\n' "$failures" >&2
+	exit 1
+fi

@@ -1,0 +1,141 @@
+{
+  "version": 3,
+  "skills": {
+    "skill-creator": {
+      "source": "openclaw/openclaw",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/openclaw/openclaw.git",
+      "skillPath": "skills/skill-creator/SKILL.md",
+      "skillFolderHash": "63116e87d3515c4ef496268eed4049135ca8197e",
+      "installedAt": "2026-02-06T07:33:49.825Z",
+      "updatedAt": "2026-09-16T09:18:44.142Z"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/vercel-labs/skills.git",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "skillFolderHash": "76a98a285cb0434f3d39e1a873823556330e398b",
+      "installedAt": "2026-02-06T07:33:56.026Z",
+      "updatedAt": "2026-09-16T09:18:49.217Z"
+    },
+    "Command Development": {
+      "source": "anthropics/claude-code",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/anthropics/claude-code.git",
+      "skillPath": "plugins/plugin-dev/skills/command-development/SKILL.md",
+      "skillFolderHash": "07e593d490ae22688926ffae79f15d85bb961825",
+      "installedAt": "2026-02-06T07:42:40.724Z",
+      "updatedAt": "2026-02-06T07:42:40.724Z"
+    },
+    "Hook Development": {
+      "source": "anthropics/claude-code",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/anthropics/claude-code.git",
+      "skillPath": "plugins/plugin-dev/skills/hook-development/SKILL.md",
+      "skillFolderHash": "9d89f677df7c43ead68cc64e8b9aa2b5bfb2cd0a",
+      "installedAt": "2026-02-06T07:42:40.763Z",
+      "updatedAt": "2026-02-06T07:42:40.763Z"
+    },
+    "Writing Hookify Rules": {
+      "source": "anthropics/claude-code",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/anthropics/claude-code.git",
+      "skillPath": "plugins/hookify/skills/writing-rules/SKILL.md",
+      "skillFolderHash": "7617490248ddc6fe04a7cc7513c6a33fa482e854",
+      "installedAt": "2026-02-06T07:42:40.803Z",
+      "updatedAt": "2026-02-06T07:42:40.803Z"
+    },
+    "Agent Development": {
+      "source": "anthropics/claude-code",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/anthropics/claude-code.git",
+      "skillPath": "plugins/plugin-dev/skills/agent-development/SKILL.md",
+      "skillFolderHash": "55323e4656435c2c3d829630c472639e6b600f34",
+      "installedAt": "2026-02-06T07:42:40.844Z",
+      "updatedAt": "2026-02-06T07:42:40.844Z"
+    },
+    "lavish": {
+      "source": "kunchenguid/lavish-axi",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/kunchenguid/lavish-axi.git",
+      "skillPath": "skills/lavish/SKILL.md",
+      "skillFolderHash": "1a478558b7c2a681e9e8ef97b99968c411f6f905",
+      "installedAt": "2026-07-30T12:05:35.407Z",
+      "updatedAt": "2026-09-16T09:18:53.284Z"
+    },
+    "quota-axi": {
+      "source": "kunchenguid/quota-axi",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/kunchenguid/quota-axi.git",
+      "skillPath": "skills/quota-axi/SKILL.md",
+      "skillFolderHash": "12c0164283038c038f5495e13d04fe96fda382d2",
+      "installedAt": "2026-07-31T06:54:21.089Z",
+      "updatedAt": "2026-09-16T09:18:55.126Z"
+    },
+    "chrome-devtools-axi": {
+      "source": "kunchenguid/chrome-devtools-axi",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/kunchenguid/chrome-devtools-axi.git",
+      "skillPath": "skills/chrome-devtools-axi/SKILL.md",
+      "skillFolderHash": "741c529ebbdc9f62c9362593701a6968267af6e6",
+      "installedAt": "2026-07-31T06:57:15.869Z",
+      "updatedAt": "2026-09-16T09:18:56.839Z"
+    },
+    "gh-axi": {
+      "source": "kunchenguid/gh-axi",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/kunchenguid/gh-axi.git",
+      "skillPath": "skills/gh-axi/SKILL.md",
+      "skillFolderHash": "6d250b8ef8a701fa82cfc2f15f005c4efa2c73a7",
+      "installedAt": "2026-07-31T06:58:50.567Z",
+      "updatedAt": "2026-09-16T09:18:58.652Z"
+    },
+    "herdr": {
+      "source": "herdrdev/herdr",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/herdrdev/herdr.git",
+      "skillPath": "skills/herdr/SKILL.md",
+      "skillFolderHash": "b9dcfddcfa7ce43e2e4cf60e724c519be553f149",
+      "installedAt": "2026-08-03T07:10:12.951Z",
+      "updatedAt": "2026-09-16T09:19:02.686Z"
+    },
+    "gh-stack": {
+      "source": "github/gh-stack",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/github/gh-stack.git",
+      "skillPath": "skills/gh-stack/SKILL.md",
+      "skillFolderHash": "6bfe555e89a6b264e09d5ece7c4040226458c8e5",
+      "installedAt": "2026-08-19T09:15:57.685Z",
+      "updatedAt": "2026-09-16T09:19:05.536Z"
+    },
+    "vision": {
+      "source": "kunchenguid/vision",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/kunchenguid/vision.git",
+      "skillPath": "skills/vision/SKILL.md",
+      "skillFolderHash": "46629400150da0f533a1e496a267e62457e21883",
+      "installedAt": "2026-09-17T06:20:04.234Z",
+      "updatedAt": "2026-09-17T06:20:04.234Z"
+    }
+  },
+  "dismissed": {
+    "findSkillsPrompt": true
+  },
+  "lastSelectedAgents": [
+    "amp",
+    "antigravity",
+    "antigravity-cli",
+    "cline",
+    "codex",
+    "cursor",
+    "deepagents",
+    "gemini-cli",
+    "github-copilot",
+    "kimi-code-cli",
+    "opencode",
+    "warp",
+    "zed",
+    "claude-code"
+  ]
+}
