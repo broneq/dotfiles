@@ -13,7 +13,7 @@ jobs:
     name: guardrails and shellcheck
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install chezmoi and shellcheck
         run: brew install chezmoi shellcheck
@@ -67,7 +67,7 @@ jobs:
       matrix:
         profile: [managed, owned]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install chezmoi
         run: brew install chezmoi
