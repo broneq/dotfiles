@@ -165,6 +165,9 @@ Documentation-only edits need `scripts/check.sh` and nothing else.
 
 - Documentation language: technical English, imperative mood, explicit instructions
 - Commit messages: Conventional Commits
-- Repository visibility: **private**. It lists the tooling of an MDM-managed work
-  machine. There are no secrets in it, but that is not a reason to publish it.
+- Repository visibility: **public**. That makes the no-secrets rule above
+  load-bearing rather than a precaution: the repository lists the tooling of an
+  MDM-managed work machine, names its MDM vendor, and states that the account has
+  no admin rights. Anything added here is published. Reversed from `private` on
+  2026-09-17 by the repository owner; see the decisions log.
 - Record every scope decision in `docs/ROADMAP.md`, including decisions to say no
