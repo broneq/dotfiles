@@ -5,6 +5,8 @@
 .bdk/
 .code-review-graph/
 .no-mistakes/
+.lavish/
+.serena/
 
 # Runtime artifacts of symlinked configs (phase 2 onwards)
 live/**/*.log

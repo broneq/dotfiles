@@ -5,7 +5,9 @@ Project instructions for agents working in this repository.
 This file holds repository facts and the invariants whose violation **fails
 silently**. Everything that only matters while touching one path lives in
 `.claude/rules/`. Everything mechanically checkable lives in `scripts/check.sh`.
-Project state lives in `docs/ROADMAP.md`, and nowhere else.
+Project state lives in `docs/ROADMAP.md`, and nowhere else. How the source tree is
+put together - file roles, template mechanics, the traps each script avoids - lives
+in `docs/IMPLEMENTATION.md`, which carries no status of its own.
 
 ## What this repository is
 
@@ -61,7 +63,9 @@ profile is a failure mode you discover a week later.
    IT". Convergence-with-removal is allowed on `owned` only, and only once the
    package list is known to be complete.
 3. **GUI casks install to `$HOME/Applications` on `managed`** via
-   `--appdir="$HOME/Applications"`. This is why WezTerm works there without admin.
+   `cask_args appdir:` in the rendered Brewfile. `brew bundle` has no `--appdir`
+   flag; the argument belongs to the Brewfile, not the command line. This is why
+   WezTerm works there without admin.
 4. Validate the declared profile against reality. If the profile says `owned` but
    `dsmemberutil checkmembership -U "$(id -un)" -G admin` reports no membership,
    abort. A configuration that lies about its environment is worse than none.
@@ -114,11 +118,19 @@ those edits to land in git: `~/.config/nvim/`, `~/.config/wezterm/`,
 symlink, and edits made in either place are the same bytes.
 
 **chezmoi-managed file or template** when only a human writes it: `~/.zshrc`,
-`~/.zprofile`, `~/.gitconfig`, `~/.claude/CLAUDE.md`, `~/.claude/RTK.md`,
-`~/.claude/hooks/herdr-agent-state.sh`.
+`~/.zprofile`, `~/.gitconfig`, `~/.claude/CLAUDE.md`, `~/.claude/RTK.md`.
 
-`~/.claude/settings.json` is the one file that fits neither: Claude Code rewrites
-it, and it needs two templated paths. See `.claude/rules/claude-config-sync.md`.
+**Merge, never copy**, when the file has more than one author.
+`~/.claude/settings.json` is written by Claude Code, by this repository, and by
+five installed tools. It is handled by `modify_settings.json.tmpl`, which merges
+the keys this repository owns and leaves every other key alone. Never
+`chezmoi add` or `re-add` it. See `.claude/rules/claude-config-sync.md`.
+
+**A tool's own integration is not authored configuration.** Hooks are installed by
+the tools that own them (`herdr integration install`, `atuin hook install`,
+`rtk init`, `gh-axi setup hooks`, `chrome-devtools-axi setup hooks`), never copied
+into the repository. A vendored file in git cannot track the vendor's version, and
+`chezmoi apply` would revert the vendor's own upgrade.
 
 ## Install channels
 

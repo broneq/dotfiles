@@ -9,6 +9,12 @@ last.
 
 Status legend: `[ ]` not started, `[~]` in progress, `[x]` done.
 
+`[~]` is the honest state for everything written on 2026-09-17: the source files
+exist and are committed, but **nothing has been executed on any machine**. No
+`chezmoi init`, no `chezmoi apply`, no `brew install`. Verification happens on a
+dedicated test account, and the boxes stay `[~]` until each "Done when" has
+actually been observed there.
+
 ---
 
 ## Current state
@@ -44,6 +50,11 @@ both directions on 2026-09-17. It was previously recorded as 24 while listing 25
 entries; corrected. `brew list --formula` returns 134 entries, the full dependency
 closure, and is not what `packages.yaml` should declare.
 
+Four more formulae are **declared** in `packages.yaml` without being leaves of the
+current install: `chezmoi` (not installed at all, see the bootstrap step in phase
+0), `shellcheck` (defect 7), and `atuin` and `bun`, both of which are standalone
+installs in `$HOME` that nothing declared. Declared total: 29.
+
 **Homebrew casks (2):** `font-jetbrains-mono-nerd-font`, `opensuperwhisper`
 
 **npm global, pinned under nvm node v24.21.0 (5):** `chrome-devtools-axi`,
@@ -54,8 +65,19 @@ closure, and is not what `packages.yaml` should declare.
 **Standalone binaries in `~/.local/bin`:** `claude`, `herdr` (20 MB),
 `treehouse` (12 MB), `uv` (41 MB), `no-mistakes`
 
+`~/.local/bin` also holds `uvx`, `env.fish` and a `code-review-graph` symlink, all
+of them written by `uv` rather than installed on their own.
+
 **Installed outside any package manager:** WezTerm, at
-`~/Applications/WezTerm.app`. No cask registered, no config yet.
+`~/Applications/WezTerm.app`. No cask registered, no config yet. Verified
+2026-09-17: `atuin` (`~/.atuin/bin/atuin`) and `bun` (`~/.bun/bin/bun`) are in the
+same category and were missing from this survey. Both are sourced by `~/.zshrc`,
+and `bun` is a hard dependency of the `settings.json` status line
+(`bunx -y ccstatusline@latest`), so a fresh machine breaks without it.
+
+**Not installed, and needed first:** `chezmoi`. Verified 2026-09-17:
+`command -v chezmoi` returns nothing. Every phase below assumes a working
+`chezmoi apply`, so phase 0 gains an explicit bootstrap step.
 
 ### Authored configuration
 
@@ -63,16 +85,25 @@ closure, and is not what `packages.yaml` should declare.
 |---|---|---|
 | `~/.zshrc` | 827 B | template |
 | `~/.zprofile` | 173 B | managed file |
-| `~/.config/nvim/` | ~4 KB, 7 files | symlink directory |
+| `~/.config/nvim/` | ~4 KB, 10 files | symlink directory |
 | `~/.config/wezterm/` | does not exist yet | symlink directory |
 | `~/.config/herdr/config.toml` | 132 B | symlink file |
 | `~/.claude/CLAUDE.md` | 1.5 KB | managed file |
 | `~/.claude/RTK.md` | 964 B | managed file |
-| `~/.claude/settings.json` | 6.2 KB | **template** |
-| `~/.claude/hooks/herdr-agent-state.sh` | 3.0 KB | managed file, executable |
+| `~/.claude/settings.json` | 6.2 KB | **merge script** (`modify_`), 13 of 15 keys |
+| `~/.claude/hooks/herdr-agent-state.sh` | 3.0 KB | **not versioned**, installed by `herdr integration install` |
 | `~/.agents/.skill-lock.json` | 5.2 KB | managed file, drives skill restore |
 
 Total authored surface: about 20 files, under 60 KB.
+
+Corrected 2026-09-17: `~/.config/nvim` holds **10** files, not 7 -
+`find ~/.config/nvim -type f` returns `init.lua`, `lazy-lock.json`,
+`init.lua.bak`, two files under `lua/` and five under `lua/plugins/`. The lock file
+and the backup were not counted.
+
+The repository has **no git remote**. `git remote -v` returns nothing, so phase 6
+has nowhere to push a workflow. Creating that repository is a manual step,
+recorded in `README.md`.
 
 ### Neovim
 
@@ -84,6 +115,7 @@ Neovim 0.12.4. Plugin manager: `lazy.nvim`, pinned by `lazy-lock.json`.
   init.lua                  # two requires, nothing else
   lua/vim_config.lua        # mapleader = space, set before any plugin loads
   lua/plugin.lua            # lazy bootstrap + require('lazy').setup('plugins')
+  lazy-lock.json            # pins every plugin to a commit
   lua/plugins/
     codediff.lua
     git.lua
@@ -136,9 +168,15 @@ directory, which is why `~/.config/nvim` can be symlinked wholesale.
    `~/.claude/plugins/cache/thedotmack/claude-mem/10.5.5/...`. The version is
    hardcoded into a cache path and `claude-mem` is no longer in the installed
    plugin set. The alias is already broken. Remove it.
-2. **`~/.zshrc` will not survive a fresh machine.** `. "$HOME/.local/bin/env"` is
-   unguarded and aborts the shell if `uv` is not yet installed. Guard it.
-3. **Hardcoded home path** appears three times in `~/.zshrc`. Replace with `$HOME`.
+2. **`~/.zshrc` will not survive a fresh machine.** Corrected 2026-09-17: there are
+   **two** unguarded sources, not one. `. "$HOME/.local/bin/env"` aborts the shell
+   if `uv` is absent, and `. "$HOME/.atuin/bin/env"` does the same if `atuin` is.
+   Guard both.
+3. **Hardcoded home path.** Corrected 2026-09-17: it appears **twice** in
+   `~/.zshrc` (the bun completion test and the dead `claude-mem` alias) and once in
+   `~/.zprofile` (the JetBrains Toolbox PATH entry), not three times in `~/.zshrc`.
+   Phase 3 therefore covers `.zprofile` as well. Replace with `$HOME` in shell and
+   `{{ .chezmoi.homeDir }}` in templates.
 4. **Homebrew PATH set twice**, manually in `.zshrc` and via `brew shellenv` in
    `.zprofile`. Keep `brew shellenv` only.
 5. **Dead file.** `~/.claude/statusline-command.sh` is unreferenced;
@@ -153,7 +191,15 @@ directory, which is why `~/.config/nvim` can be symlinked wholesale.
    `"installed_on_request": false`. It is not a leaf, so a `brew leaves`-derived
    `packages.yaml` would omit it, and removing `actionlint` would silently remove
    the repository's own lint gate. Declare it explicitly in phase 1.
-8. **Scripts must target bash 3.2.** macOS ships `/bin/bash` 3.2.57 and Homebrew
+8. **Two skills cannot be restored.** `~/.agents/skills` holds 15 directories but
+   `.skill-lock.json` has 13 entries. `create-tasks-workspace` and `no-mistakes`
+   have no `sourceUrl`, so phase 5 cannot reproduce them. Its completion criterion
+   is 13, not 15, and the two are documented as manual in `README.md`.
+9. **The lock file keys are display names, not directory names.** `"Agent
+   Development"` corresponds to the directory `agent-development`. A restore script
+   that trusts the key produces `~/.agents/skills/Agent Development`. Take the
+   directory from `basename(dirname(skillPath))`.
+10. **Scripts must target bash 3.2.** macOS ships `/bin/bash` 3.2.57 and Homebrew
    `bash` is not installed. `mapfile`, associative arrays and `${arr[@]}` over an
    empty array under `set -u` are all unavailable. Found by `scripts/check.sh`
    failing with `mapfile: command not found` on its first run.
@@ -164,12 +210,18 @@ directory, which is why `~/.config/nvim` can be symlinked wholesale.
 
 **Goal:** an empty but valid chezmoi source tree, with the profile prompt working.
 
-- [ ] `git init`, add `.gitignore` covering `live/**/*.log`, `live/**/*.sock`, `.DS_Store`
-- [ ] Create `.chezmoiroot` containing `home`
-- [ ] Create `home/.chezmoi.toml.tmpl` with `promptChoiceOnce` over
+- [ ] **Bootstrap step, manual and one-off:** `brew install chezmoi`. The engine
+      cannot install itself from inside its own run. Added after the 2026-09-17
+      survey found `chezmoi` neither installed nor declared anywhere
+- [x] `git init`, add `.gitignore` covering `live/**/*.log`, `live/**/*.sock`, `.DS_Store`
+- [~] Create `.chezmoiroot` containing `home`
+- [~] Create `home/.chezmoi.toml.tmpl` with `promptChoiceOnce` over
       `managed` / `owned`, stored as `.profile`
-- [ ] Add a profile-vs-reality assertion: if `.profile` is `owned`, require admin
-      group membership; abort otherwise
+- [~] Add a profile-vs-reality assertion: if `.profile` is `owned`, require admin
+      group membership; abort otherwise. Lives in
+      `run_once_before_00-assert-profile.sh.tmpl`, not in `.chezmoi.toml.tmpl`:
+      the config template is evaluated once at `init`, the assertion must run on
+      every apply
 - [ ] Run `chezmoi init --source ~/projects/dotfiles` and confirm the prompt fires
       exactly once
 - [x] `scripts/check.sh`: mechanical guardrails replacing the rules that used to
@@ -187,21 +239,26 @@ no-op.
 
 **Goal:** every installed tool is declared in one file, and re-installable.
 
-- [ ] Create `home/.chezmoidata/packages.yaml` with the four channels and the
-      profile split from "Current state" above
-- [ ] Split casks into `user_level` (fonts, installs to `~/Library`) and
-      `app_bundle` (needs an `--appdir` override on `managed`)
-- [ ] `run_onchange_10-brew.sh.tmpl`: render a Brewfile from YAML, run
-      `brew bundle`. **No `--cleanup`, no `--force`.** Pass
-      `--appdir="$HOME/Applications"` when profile is `managed`
-- [ ] `run_onchange_30-npm-global.sh.tmpl`: install the five `*-axi` packages
-- [ ] `run_onchange_40-uv-tools.sh.tmpl`: bootstrap `uv` if absent, then
+- [~] Create `home/.chezmoidata/packages.yaml` with the four channels. The profile
+      split turned out to apply to casks only - see the decisions log
+- [~] Split casks into `user_level` (fonts, installs to `~/Library`) and
+      `app_bundle` (needs an appdir override on `managed`)
+- [~] `run_onchange_10-brew.sh.tmpl`: render a Brewfile from YAML, run
+      `brew bundle install`. **No `--cleanup`, no `--force`.** Corrected: `brew
+      bundle` has no `--appdir` flag. The mechanism is `cask_args appdir:` written
+      into the Brewfile, emitted only when the profile is `managed`
+- [~] `run_onchange_30-npm-global.sh.tmpl`: install the five `*-axi` packages
+- [~] `run_onchange_40-uv-tools.sh.tmpl`: bootstrap `uv` if absent, then
       `uv tool install` each entry
-- [ ] Add WezTerm as a cask and drop the manual `~/Applications/WezTerm.app`
-      install, so it becomes managed like everything else
-- [ ] Declare `shellcheck` explicitly (defect 7). It is currently installed only
-      as a dependency of `actionlint`, and the repository's own lint gate depends
-      on it
+- [~] Add WezTerm as a cask
+- [ ] Drop the manual `~/Applications/WezTerm.app` install. Manual and one-off:
+      `brew install --cask` refuses to write over an app bundle it has no receipt
+      for, and `--force` is banned repository-wide. Move the existing bundle to the
+      trash once, then apply. Recorded in `README.md`
+- [~] Declare `shellcheck` explicitly (defect 7)
+- [~] Declare `chezmoi`, `atuin` and `bun` explicitly. Same class of defect as 7:
+      installed, depended upon, declared nowhere. `bun` is a hard dependency of the
+      `settings.json` status line
 
 **Done when:** a second `chezmoi apply` produces no changes and installs nothing.
 
@@ -215,16 +272,23 @@ no-op.
 **Goal:** all authored config lives in the repo, and application-written files
 stay editable in place.
 
-- [ ] Create `live/` and move the real files there: `nvim/`, `wezterm/`,
+- [~] Create `live/` and copy the real files there: `nvim/`, `wezterm/`,
       `herdr/config.toml`
-- [ ] Add `symlink_*.tmpl` entries pointing at `{{ .chezmoi.sourceDir }}/../live/...`
-- [ ] Add managed files: `~/.claude/CLAUDE.md`, `~/.claude/RTK.md`,
-      `~/.claude/hooks/herdr-agent-state.sh` (mode 0755)
-- [ ] Add `~/.claude/settings.json` as a template with exactly two substitutions:
-      the `bdk` marketplace path and the hook path, both via `{{ .chezmoi.homeDir }}`
-- [ ] Write the first WezTerm config in `live/wezterm/wezterm.lua`: JetBrains Mono
+- [~] Add `symlink_*.tmpl` entries pointing at `{{ .chezmoi.sourceDir }}/../live/...`
+- [~] Add managed files: `~/.claude/CLAUDE.md`, `~/.claude/RTK.md`
+- [~] Handle `~/.claude/settings.json` with a `modify_` merge script rather than a
+      copy. Corrected 2026-09-17: the file has three authors, so copying it
+      versioned somebody else's output. 13 of its 15 top-level keys are ours;
+      `hooks` belongs to five installed tools and `autoMode` to Claude Code.
+      Only one templated path remains, the `bdk` marketplace
+- [~] Install agent hooks through each tool's own installer
+      (`run_onchange_after_60-agent-hooks.sh.tmpl`) instead of versioning a copy of
+      herdr's script
+- [~] Write the first WezTerm config in `live/wezterm/wezterm.lua`: JetBrains Mono
       Nerd Font, theme, sensible keybindings
-- [ ] Delete `~/.claude/statusline-command.sh`
+- [~] Delete `~/.claude/statusline-command.sh` - declaratively, via
+      `home/.chezmoiremove`. A one-shot `rm` in a `run_once_` script would silently
+      do nothing on a machine that had already run it
 - [ ] Delete `~/.config/nvim/init.lua.bak` once the new layout has been used for a
       few days and the old single-file config is no longer wanted
 
@@ -233,9 +297,9 @@ stay editable in place.
 Move the whole of `~/.config/nvim` (7 files) into `live/nvim/` and symlink it.
 Plugin payloads live in `~/.local/share/nvim/lazy/`, so nothing large follows.
 
-- [ ] Commit `lazy-lock.json` together with the config. It pins every plugin to a
+- [~] Commit `lazy-lock.json` together with the config. It pins every plugin to a
       commit and is what makes a fresh machine reproduce this exact setup
-- [ ] Confirm `ripgrep` and `fd` are in `packages.yaml` before this phase lands.
+- [x] Confirm `ripgrep` and `fd` are in `packages.yaml` before this phase lands.
       Without them the snacks picker is installed but non-functional, which is a
       worse state than not having it
 - [ ] Verify headlessly after apply, not by opening the editor and looking:
@@ -261,9 +325,13 @@ the directory instead of its files would pull in 1.5 GB.
 
 **Goal:** `~/.zshrc` that works on a machine where nothing is installed yet.
 
-- [ ] Port `.zshrc` to a template, fixing defects 1 through 4 from "Current state"
-- [ ] Guard every `source` with an existence test
-- [ ] Keep `brew shellenv` in `.zprofile` as the only PATH entry point for Homebrew
+- [~] Port `.zshrc` to a template, fixing defects 1 through 4 from "Current state"
+- [~] Port `.zprofile` to a template as well - it carries the third hardcoded home
+      path (defect 3, corrected)
+- [~] Guard every `source` with an existence test. Two were unguarded, not one
+- [~] Keep `brew shellenv` in `.zprofile` as the only PATH entry point for
+      Homebrew. It probes both `/opt/homebrew` and `/usr/local`, so the file does
+      not assume Apple silicon
 - [ ] Verify with `zsh -l -c 'exit'` under a temporary `HOME` where no tools exist
 
 **Done when:** a login shell in an empty `HOME` starts with no errors.
@@ -274,13 +342,19 @@ the directory instead of its files would pull in 1.5 GB.
 
 **Goal:** one repo, correct identity and package set on both machines.
 
-- [ ] Add `~/.gitconfig` as a template; email switches on `.profile`
-- [ ] Confirm the profile-driven package split renders correctly for both values
+- [~] Add `~/.gitconfig` as a template; email switches on `.profile`
+- [ ] Confirm the profile-driven split renders correctly for both values
       (`chezmoi execute-template` against each)
-- [ ] Document in `README.md` how to bootstrap the second machine
+- [~] Document in `README.md` how to bootstrap the second machine, and every step
+      that stays manual
 
-**Done when:** `chezmoi execute-template` with `profile=owned` produces a Brewfile
-containing the admin-only casks, and with `profile=managed` does not.
+**Done when:** `chezmoi execute-template` with `profile=managed` produces a
+Brewfile containing `cask_args appdir:`, and with `profile=owned` does not.
+
+Corrected 2026-09-17: the original criterion named "admin-only casks", but there
+are none. The container formulae were the only profile-split candidate and they are
+wanted on both machines. The appdir line is the real divergence, and CI asserts it
+in both directions.
 
 ---
 
@@ -288,18 +362,24 @@ containing the admin-only casks, and with `profile=managed` does not.
 
 **Goal:** plugins and skills reproducible on a fresh machine.
 
-- [ ] Version `~/.agents/.skill-lock.json`
-- [ ] Write `run_onchange_50-claude-skills.sh.tmpl`: for each entry in the lock
-      file, clone `sourceUrl` into a temp dir and copy `skillPath`'s folder into
-      `~/.agents/skills/<name>`, then symlink into `~/.claude/skills`
-- [ ] Make the `bdk` cross-repo dependency explicit: clone
-      `<home>/projects/bdk` if missing, or fail with a clear message
+- [~] Version `~/.agents/.skill-lock.json`
+- [~] Write `run_onchange_after_50-claude-skills.sh.tmpl`: for each entry in the
+      lock file, clone `sourceUrl` once per repository and copy `skillPath`'s
+      folder into `~/.agents/skills/<folder>`, then symlink into `~/.claude/skills`.
+      The folder name comes from `basename(dirname(skillPath))`, never from the
+      lock file key (defect 9). The list is expanded at template time with
+      `include … | fromJson`, which removes a runtime `jq` dependency and makes
+      `run_onchange` fire on any lock file change
+- [~] Make the `bdk` cross-repo dependency explicit: clone
+      `<home>/projects/bdk` if missing, or fail with a clear message naming SSH as
+      the likely cause
 - [ ] Confirm plugins restore from `settings.json` alone
       (`enabledPlugins` + `extraKnownMarketplaces`), with no need to reproduce
       `installed_plugins.json` or the plugin cache
 
 **Done when:** deleting `~/.agents/skills` and running `chezmoi apply` restores
-all 15 skills.
+**13** skills. Corrected 2026-09-17 from 15: see defect 8. The remaining two have
+no source to restore from and are documented as manual in `README.md`.
 
 **Note:** there is no `skills` CLI on this machine. The lock file is written by an
 agent-side skill, not a package manager, so restore must be our own script. This
@@ -311,18 +391,20 @@ is the phase most likely to need iteration.
 
 **Goal:** prove a fresh machine works, without owning a fresh machine.
 
-- [ ] `.github/workflows/test.yml` on `macos-latest`
-- [ ] Job 1: `./scripts/check.sh`. It already runs locally and in one step covers
-      shellcheck, the `sudo` ban, the `brew bundle` flag ban, absolute home paths,
-      the script prologue and the secret tripwire
-- [ ] Extend Job 1 to shellcheck the `*.sh.tmpl` scripts too, by rendering them
-      with `chezmoi execute-template` first. `check.sh` skips them today and says
-      so in its output
-- [ ] Job 2: `chezmoi apply` into a throwaway `HOME` with `profile=managed`, then
-      assert the expected symlinks and files exist
-- [ ] Job 3: same with `profile=owned`, asserting the profile split diverges
-- [ ] Do not install the full package set in CI; assert the rendered Brewfile
-      instead. Installing 22 formulae per run buys little and costs minutes
+- [ ] Create the private GitHub repository and push `main`. Manual by decision:
+      the repository owner does this, not an agent
+- [~] `.github/workflows/test.yml` on `macos-latest`
+- [~] Job 1: `./scripts/check.sh`
+- [~] Extend Job 1 to shellcheck the `*.sh.tmpl` scripts too, by rendering them
+      with `chezmoi execute-template` first - under **both** profiles, because a
+      template can be valid on one branch and broken on the other
+- [~] Job 2: `chezmoi apply` into a throwaway `HOME` with `profile=managed`, then
+      assert the expected symlinks and files exist, plus the `~/.claude` file count
+- [~] Job 3: same with `profile=owned`, asserting the profile split diverges. Both
+      run from one matrix
+- [~] Do not install the full package set in CI; assert the rendered Brewfile
+      instead, via `--exclude=scripts`. Installing 29 formulae per run buys little
+      and costs minutes
 
 **Done when:** CI is green and a deliberately broken template turns it red.
 
@@ -366,16 +448,20 @@ half the toolbox. The ordering above exists precisely to prevent that.
       formula. Do not try to make Homebrew's `node` the mise-managed one.
 - [ ] `treehouse`, `no-mistakes` and `herdr` are standalone binaries in
       `~/.local/bin` with no declared installer. Find their upstream install
-      method, or accept them as a documented manual step.
-- [ ] Does the `owned` machine need the full container stack (colima, docker), or
-      is that work-only tooling?
-- [ ] **Terminal choice affects what Neovim can display.** Inline images and
-      inline mermaid rendering in the buffer require the Kitty graphics protocol.
-      `snacks.image` supports Kitty, Ghostty and tmux fully; WezTerm only
-      partially, with inline rendering unsupported; iTerm2, the current terminal,
-      not at all. WezTerm is already installed and slated for phase 1. Decide
-      whether inline rendering matters enough to prefer Ghostty instead, before
-      writing a WezTerm config worth keeping.
+      method, or accept them as a documented manual step. `atuin` and `bun` were in
+      the same category and are now Homebrew formulae; these three are what is left.
+- [ ] `create-tasks-workspace` and `no-mistakes` have no entry in
+      `.skill-lock.json` (defect 8). Find their source, accept them as manual, or
+      drop them. Documented as manual for now, which is the honest state rather
+      than a decision.
+- [ ] The `wezterm` cask in homebrew-core is pinned to a 2024 build. If the
+      installed application is newer, decide between the `wezterm@nightly` cask and
+      accepting the older stable one. Not resolvable without comparing versions on
+      the machine.
+- [x] **Resolved.** The container stack stays common to both profiles. Moved to the
+      decisions log.
+- [x] **Resolved.** WezTerm stays; Ghostty is not adopted. Moved to the decisions
+      log. `live/wezterm/wezterm.lua` is written on that basis.
 - [ ] Revisit the Neovim editing layer once the current set has been used in
       anger: LSP (`nvim-lspconfig`), completion (`blink.cmp`), and directory
       navigation (`oil.nvim`). All three are deliberately absent today.
@@ -403,3 +489,17 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-17 | "no agent name as co-author" dropped from this repo's `CLAUDE.md` | It is already in the user-level `~/.claude/CLAUDE.md` and applies everywhere. Restating it here buys nothing and costs tokens in every session |
 | 2026-09-17 | Scripts target bash 3.2, not bash 4 | macOS ships 3.2.57 and Homebrew `bash` is not installed. A bootstrap script that needs a package manager to run cannot bootstrap the package manager |
 | 2026-09-17 | No pre-commit framework; one script invoked by hand and by CI | The direct path has not exposed a blocker yet. Adding a hook manager would be machinery ahead of need |
+| 2026-09-17 | `chezmoi` installed by a documented manual `brew install`, and also declared in `packages.yaml` | The engine cannot install itself from inside its own run. Declaring it as well is what makes the second machine converge on one version rather than on whatever the bootstrap happened to fetch |
+| 2026-09-17 | `atuin` and `bun` declared as Homebrew formulae rather than left as standalone `$HOME` installs | Same defect as `shellcheck`: depended upon by `.zshrc` and by the `settings.json` status line, declared nowhere. One channel is worth more than preserving two installer scripts |
+| 2026-09-17 | Container stack common to both profiles | The four container formulae were the only split candidate and they are wanted on both machines. A split would have been structure without content |
+| 2026-09-17 | WezTerm over Ghostty | Inline mermaid in the buffer needs the Kitty graphics protocol, which WezTerm supports only partially. It is a convenience, not a requirement: `<leader>mp` already renders mermaid in the browser. WezTerm is installed and slated for phase 1; swapping terminals to gain in-buffer images is a bigger change than the gain justifies |
+| 2026-09-17 | Profiles diverge on `cask_args appdir:`, not on the package list | Phase 4's original criterion assumed admin-only casks. There are none. The appdir override is the real difference and CI asserts it in both directions |
+| 2026-09-17 | The skill list is expanded into the restore script at template time, not parsed at runtime | Removes a `jq` dependency, removes the question of whether the lock file has reached the destination yet, and makes the script text change whenever the lock file does - which is exactly what re-triggers `run_onchange` |
+| 2026-09-17 | `~/.claude/statusline-command.sh` removed via `.chezmoiremove`, not by a script | A one-shot `rm` in a `run_once_` script silently does nothing on a machine that already ran it. A declarative removal converges |
+| 2026-09-17 | Plan split: `docs/IMPLEMENTATION.md` holds the technical design, `docs/ROADMAP.md` keeps all state | An implementation document was wanted, but two files with checkboxes drift apart. Splitting on *how* versus *what state* keeps "one file, one truth" intact without changing the rule |
+| 2026-09-17 | The `owned` git email is written into `dot_gitconfig.tmpl` rather than prompted | Chosen explicitly during review. The repository is private and an address is not a secret. Revisit if a third environment appears: `promptStringOnce` would handle that without a repository change |
+| 2026-09-17 | No hook file is versioned; every tool installs its own | Four of the five Claude Code hooks are already just a command name on `PATH`. The fifth, herdr's, was the sole reason `settings.json` needed a second templated path, the sole reason `check.sh` needed an exemption, and would have had `chezmoi apply` revert herdr's own upgrades. `herdr integration status` tracks a version that a copy in git cannot. The declaration moves from a snapshot to an install command, which is the more durable form |
+| 2026-09-17 | `settings.json` merged with a `modify_` script, not copied and re-added | It has three authors: this repository, Claude Code and five tools. A copy versions the other two authors' output. `modify_` receives the current file on stdin and writes the merge, so nothing of theirs is ever lost, and the `chezmoi re-add` procedure that the old rule described disappears entirely |
+| 2026-09-17 | `autoMode` deliberately not versioned | Claude Code generates it per project. It named a client organisation, its private repository, its services, its protected branches and the environment variables holding its secrets. That is neither toolbox configuration nor this repository's to publish, and it goes stale the moment the project changes |
+| 2026-09-17 | History rewritten before the first push to remove `settings.json.tmpl` | The repository had no remote yet, so nothing had been published and the rewrite cost nothing. Purging a blob after a push is a different and much worse problem |
+| 2026-09-17 | Phases 0-6 authored without executing anything | Verification will happen on a dedicated test account, so no run on the work machine can be trusted as a fresh-machine test anyway. Checkboxes stay `[~]` until that account has run each "Done when" |
