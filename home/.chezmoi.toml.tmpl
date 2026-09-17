@@ -1,0 +1,14 @@
+{{/*
+The profile describes privilege level, not employer. `managed` is the MDM-enrolled
+work Mac with no admin rights; `owned` is the personal Mac with root.
+
+promptChoiceOnce asks exactly once, at `chezmoi init`, and stores the answer in
+~/.config/chezmoi/chezmoi.toml. It is never re-derived from the hostname: Macs get
+renamed, and a silently switched profile is a failure mode you discover a week later.
+*/ -}}
+{{- $profile := promptChoiceOnce . "profile"
+    "Machine profile (managed = MDM, no admin rights / owned = personal, admin)"
+    (list "managed" "owned") -}}
+
+[data]
+    profile = {{ $profile | quote }}

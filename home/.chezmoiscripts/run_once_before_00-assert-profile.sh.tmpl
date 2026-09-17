@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#
+# Validate the declared profile against reality.
+#
+# The profile is answered once at `chezmoi init` and drives every branch in this
+# repository, including whether casks may install into /Applications. A
+# configuration that lies about its environment is worse than no configuration,
+# so check it on every apply rather than trusting the answer forever.
+#
+# Portability: macOS ships bash 3.2.57 and Homebrew bash is not installed.
+
+set -euo pipefail
+
+user="$(id -un)"
+
+is_admin() {
+	dsmemberutil checkmembership -U "$1" -G admin 2>/dev/null | grep -q 'is a member'
+}
+
+{{ if eq .profile "owned" -}}
+if ! is_admin "$user"; then
+	printf 'profile is "owned" but %s is not a member of the admin group.\n' "$user" >&2
+	printf 'Scripts would assume privileges this account does not have.\n' >&2
+	printf 'Fix: chezmoi init --prompt   and answer "managed".\n' >&2
+	exit 1
+fi
+{{ else -}}
+# The reverse is not an error: `managed` only ever does less than `owned`, so an
+# admin account running it is safe. Say so anyway, because it is usually a typo.
+if is_admin "$user"; then
+	printf 'note: profile is "managed" but %s has admin rights.\n' "$user" >&2
+	printf 'Safe, but GUI casks will install to ~/Applications. Re-run with\n' >&2
+	printf '"chezmoi init --prompt" if you meant "owned".\n' >&2
+fi
+{{ end -}}
