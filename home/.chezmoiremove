@@ -1,0 +1,6 @@
+# Paths chezmoi removes from the destination on every apply.
+#
+# settings.json runs `bunx -y ccstatusline@latest`; this script is referenced by
+# nothing and predates that. Removing it declaratively beats a one-shot `rm` in a
+# run_once_ script, which would silently do nothing on a machine that already ran it.
+.claude/statusline-command.sh

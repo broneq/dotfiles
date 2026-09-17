@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+#
+# Let each tool install its own Claude Code hook.
+# See docs/IMPLEMENTATION.md, "Hooks belong to their tools".
+
+set -euo pipefail
+
+# Every one of these writes its own entry into ~/.claude/settings.json, and four
+# of the five need no file on disk at all - the hook is just the command name.
+# herdr is the exception: it ships a script and tracks its own version, which is
+# precisely why versioning a copy of that script here was the wrong move.
+#
+# All five are idempotent. Re-running reinstalls the current version, which is
+# also how a tool upgrade gets its new hook.
+install_hook() {
+	local tool="$1"
+	shift
+	if ! command -v "$tool" >/dev/null 2>&1; then
+		printf 'hook: %s is not installed, skipping\n' "$tool" >&2
+		return 0
+	fi
+	if "$@" >/dev/null 2>&1; then
+		printf 'hook: %s\n' "$tool"
+	else
+		printf 'hook: %s failed to install its hook (%s)\n' "$tool" "$*" >&2
+	fi
+}
+
+install_hook herdr              herdr integration install claude
+install_hook atuin              atuin hook install claude-code
+install_hook rtk                rtk init --global
+install_hook gh-axi             gh-axi setup hooks
+install_hook chrome-devtools-axi chrome-devtools-axi setup hooks
