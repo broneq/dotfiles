@@ -77,7 +77,12 @@ installs in `$HOME` that nothing declared. Declared total: 27.
 of them written by `uv` rather than installed on their own.
 
 **Installed outside any package manager:** WezTerm, at
-`~/Applications/WezTerm.app`. No cask registered, no config yet. Verified
+`~/Applications/WezTerm.app`. No cask registered. Corrected 2026-09-18: "no
+config yet" was wrong, and the error was load-bearing. A full configuration
+existed at `~/.wezterm.lua` - an iTerm2 "Default" profile reproduced by hand -
+and WezTerm reads that path *before* `~/.config/wezterm/wezterm.lua`. Its
+contents are now `live/wezterm/wezterm.lua` and `home/.chezmoiremove` deletes the
+shadowing file. Verified
 2026-09-17: `atuin` (`~/.atuin/bin/atuin`) and `bun` (`~/.bun/bin/bun`) are in the
 same category and were missing from this survey. Both are sourced by `~/.zshrc`,
 and `bun` is a hard dependency of the `settings.json` status line
@@ -94,7 +99,7 @@ and `bun` is a hard dependency of the `settings.json` status line
 | `~/.zshrc` | 827 B | template |
 | `~/.zprofile` | 173 B | managed file |
 | `~/.config/nvim/` | ~4 KB, 10 files | symlink directory |
-| `~/.config/wezterm/` | does not exist yet | symlink directory |
+| `~/.config/wezterm/` | ~4 KB, 1 file | symlink directory |
 | `~/.config/herdr/config.toml` | 132 B | symlink file |
 | `~/.config/ccstatusline/settings.json` | 2.0 KB | symlink file |
 | `~/.claude/CLAUDE.md` | 1.5 KB | managed file |
@@ -730,3 +735,6 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-18 | `profiles.json` merged by `modify_profiles.json.tmpl`, not managed outright | Same two-author shape as `settings.json`: this repository declares `private`, while `/git-identity:profile-add` may add a client or second-account profile on one machine only. A managed file would delete those on the next apply, and silently - the gh config directory and the profile gitconfig both survive, so the only symptom is `/git-identity:use` reporting that a profile which plainly exists does not |
 | 2026-09-18 | Commit addresses moved into `.chezmoidata/identity.yaml` | `dot_gitconfig.tmpl` and `private.gitconfig.tmpl` need the same personal address. Two literals that must agree, changed months apart, produce commits attributed to a stale address in exactly the projects bound to a profile - and nothing reports it. Same argument, and the same file location, as `packages.yaml` |
 | 2026-09-18 | `check-templates.sh` globs `modify_*.tmpl` instead of naming them | The list had one entry and gained a second. A `modify_` script that no gate renders is a script whose first execution is on the machine, against the real file it was written to protect |
+| 2026-09-18 | `~/.wezterm.lua` removed via `.chezmoiremove`, its contents merged into `live/wezterm/wezterm.lua` | WezTerm resolves `~/.wezterm.lua` before `~/.config/wezterm/wezterm.lua` and stops at the first hit. The symlink this repository creates was therefore inert: apply succeeded, `chezmoi diff` was empty, and the terminal kept the unversioned file. Two configurations also drifted - a fix had to be written twice to reach both machines |
+| 2026-09-18 | WezTerm keeps the hand-built iTerm2 palette; the Dracula scheme is dropped | The stated reason for Dracula was one palette across the window, but herdr emits its own Dracula in truecolor (`38:2::` throughout its output) and never reads the terminal's ANSI palette. A scheme here would only recolour the shell, `ls`, `git` and Neovim, against a background that was chosen deliberately |
+| 2026-09-18 | Dim text (SGR 2) given an explicit colour through `font_rules` | WezTerm implements `Intensity=Half` by substituting a lighter face and leaving the colour alone. JetBrains Mono ships ExtraLight, so Claude Code's input suggestion rendered at full foreground and read as text already typed. The rules pin the regular weight and set `foreground` to the foreground blended halfway into the background. Note for whoever edits this next: `foreground` belongs to the `TextStyle` that `wezterm.font*` returns, not to the attributes table passed into it, which discards unknown keys without an error |

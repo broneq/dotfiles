@@ -4,3 +4,9 @@
 # nothing and predates that. Removing it declaratively beats a one-shot `rm` in a
 # run_once_ script, which would silently do nothing on a machine that already ran it.
 .claude/statusline-command.sh
+
+# WezTerm reads ~/.wezterm.lua before ~/.config/wezterm/wezterm.lua and stops at
+# the first hit. While that file exists the symlink this repository creates is
+# inert: apply succeeds, `chezmoi diff` is empty, and the terminal keeps its old
+# configuration. Its contents were merged into live/wezterm/wezterm.lua.
+.wezterm.lua
