@@ -34,4 +34,12 @@ fi
 # version nvm already considers default and fall back to the latest LTS.
 nvm use --silent default >/dev/null 2>&1 || nvm install --lts
 
+# `nvm install --lts` writes `default -> lts/*`. .zshrc resolves the default
+# alias by globbing ~/.nvm/versions/node/v<alias>* so that no shell has to enter
+# nvm's resolver; that needs a bare major. `lts/*` matches nothing and falls
+# through to `nvm use`, measured at 0.24 s on every shell and every subshell.
+# Pin the alias to the major that is actually installed. Idempotent: a second
+# run resolves the same version and writes the same alias.
+nvm alias default "$(nvm current | sed -E 's/^v([0-9]+)\..*/\1/')" >/dev/null
+
 npm install --global --no-fund --no-audit{{ range .packages.npm }} "{{ . }}"{{ end }}

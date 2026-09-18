@@ -118,7 +118,7 @@ those edits to land in git: `~/.config/nvim/`, `~/.config/wezterm/`,
 symlink, and edits made in either place are the same bytes.
 
 **chezmoi-managed file or template** when only a human writes it: `~/.zshrc`,
-`~/.zprofile`, `~/.gitconfig`, `~/.claude/CLAUDE.md`, `~/.claude/RTK.md`.
+`~/.zprofile`, `~/.gitconfig`, `~/.claude/CLAUDE.md`.
 
 **Merge, never copy**, when the file has more than one author. Two files qualify,
 and neither may ever be `chezmoi add`ed or `re-add`ed:
@@ -145,8 +145,11 @@ repository. Logging in is a manual bootstrap step in `README.md`. Enforced by
 **A tool's own integration is not authored configuration.** Hooks are installed by
 the tools that own them (`herdr integration install`, `atuin hook install`,
 `rtk init`, `gh-axi setup hooks`, `chrome-devtools-axi setup hooks`), never copied
-into the repository. A vendored file in git cannot track the vendor's version, and
-`chezmoi apply` would revert the vendor's own upgrade.
+into the repository. The same applies to `~/.claude/RTK.md`, which `rtk init`
+writes and rewrites on upgrade. A vendored file in git cannot track the vendor's
+version, and `chezmoi apply` would revert the vendor's own upgrade - or, when the
+vendor wins the race, refuse the next apply over a file it did not expect to
+change.
 
 ## Install channels
 

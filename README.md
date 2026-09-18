@@ -93,12 +93,14 @@ Six things are deliberately manual. Each one is a decision, not an omission.
    project to the profile afterwards with `/git-identity:use private`, which writes
    `.claude/settings.local.json`; that file holds absolute paths from one machine's
    home directory and stays out of every repository.
-6. **`herdr` and `claude` themselves.** Both are standalone binaries in
-   `~/.local/bin` and no install channel declares them. This repository symlinks
-   herdr's config, installs its Claude Code hook and restores its skill, but does
-   not put the binary on the machine; the hooks script prints
-   `herdr is not installed, skipping` and carries on. Tracked as an open question
-   in `docs/ROADMAP.md`, not as a decision.
+6. **`claude` itself.** A standalone binary in `~/.local/bin` that no install
+   channel declares; the whole agent layer is configured for it. Tracked as an
+   open question in `docs/ROADMAP.md`, not as a decision.
+
+   `herdr` used to be in the same position and is now the Homebrew formula. A
+   machine that still carries the `curl | sh` copy in `~/.local/bin` must delete
+   it by hand: that directory precedes `/opt/homebrew/bin` on `PATH`, so the
+   standalone binary would shadow the one Homebrew keeps current.
 
 ## Verification
 

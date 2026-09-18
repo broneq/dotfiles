@@ -52,8 +52,14 @@ for profile in managed owned; do
 	# --persistent-state keeps this out of ~/.config/chezmoi. Without it, running
 	# this script by hand leaves a recorded config-template hash behind, and the
 	# next real `chezmoi init` warns that the template changed.
-	if ! chezmoi init \
-		--source . \
+	#
+	# HOME is redirected as well, and --config-path alone is not enough: the
+	# `Once` prompt variants look the answer up in the config file at the default
+	# location before they consult --promptChoice. On an initialised machine that
+	# file exists and names the other profile, so `managed` rendered as `owned`
+	# and the assertion below fired. CI never saw it because its HOME is empty.
+	if ! env HOME="$tmp/home-$profile" chezmoi init \
+		--source "$PWD" \
 		--promptChoice "$PROMPT=$profile" \
 		--destination "$tmp/home-$profile" \
 		--config-path "$cfg" \

@@ -35,10 +35,11 @@ fi
 
 # With --no-use nothing put node on PATH, so do it here without nvm's resolver -
 # every entry point into that resolver costs the same 0.8 s the flag just saved.
-# The alias file holds whatever `nvm alias default` prints, a bare major ("24")
-# on both machines; the `n` glob qualifier sorts numerically, so [-1] is v24.21.0
-# and not v24.9.0. An alias the glob cannot expand (lts/*, a version never
-# installed) falls through to nvm itself: correct, and slow only in that case.
+# The alias file holds whatever `nvm alias default` prints. `30-npm-global` pins
+# it to a bare major ("24"); the `n` glob qualifier sorts numerically, so [-1] is
+# v24.21.0 and not v24.9.0. An alias the glob cannot expand (lts/*, which
+# `nvm install --lts` writes on its own; a version never installed) falls through
+# to nvm itself: correct, and slow only in that case.
 if command -v nvm >/dev/null 2>&1; then
 	if read -r _nvm_default 2>/dev/null <"$NVM_DIR/alias/default"; then
 		_nvm_bin=("$NVM_DIR"/versions/node/"v${_nvm_default}"*/bin(N/n[-1]))

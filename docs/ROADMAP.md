@@ -71,7 +71,10 @@ installs in `$HOME` that nothing declared. Declared total: 27.
 **uv tools (1):** `code-review-graph`
 
 **Standalone binaries in `~/.local/bin`:** `claude`, `herdr` (20 MB),
-`treehouse` (12 MB), `uv` (41 MB), `no-mistakes`
+`treehouse` (12 MB), `uv` (41 MB), `no-mistakes`. Corrected 2026-09-18: `herdr`
+is a homebrew-core formula and is declared in `packages.yaml` as of that date;
+the `~/.local/bin` copy on the `managed` machine is the `curl | sh` install and
+shadows the formula until deleted by hand (see README, bootstrap step 6).
 
 `~/.local/bin` also holds `uvx`, `env.fish` and a `code-review-graph` symlink, all
 of them written by `uv` rather than installed on their own.
@@ -103,7 +106,7 @@ and `bun` is a hard dependency of the `settings.json` status line
 | `~/.config/herdr/config.toml` | 132 B | symlink file |
 | `~/.config/ccstatusline/settings.json` | 2.0 KB | symlink file |
 | `~/.claude/CLAUDE.md` | 1.5 KB | managed file |
-| `~/.claude/RTK.md` | 964 B | managed file |
+| `~/.claude/RTK.md` | 452 B | **not versioned**, written by `rtk init --global` |
 | `~/.claude/settings.json` | 6.2 KB | **merge script** (`modify_`), 13 of 15 keys |
 | `~/.claude/hooks/herdr-agent-state.sh` | 3.0 KB | **not versioned**, installed by `herdr integration install` |
 | `~/.agents/.skill-lock.json` | 5.2 KB | managed file, drives skill restore |
@@ -321,6 +324,56 @@ that failed **loudly**, and it is the cheaper kind for exactly that reason.
    reporting. The negative control is what surfaced it - the gate failed with the
    wrong message rather than the right one. Guarded with `|| true`.
 
+### Defects found by the first apply on the `owned` machine
+
+Surveyed 2026-09-18, from the scrollback of the first real `chezmoi apply` on the
+personal Mac and the one that followed it. CI had passed twice by then; every item
+here is something a fresh runner cannot see, either because the runner has no
+prior state or because it never runs apply a second time.
+
+19. **`~/.claude/RTK.md` was versioned, and it is rtk's file.** `rtk init --global`
+   writes it and `run_after_60` calls `rtk init` on every apply. The copy in git was
+   rtk's own text from an older release; rtk 0.49 overwrote it seconds after
+   chezmoi wrote it, and the next apply stopped with
+   "`.claude/RTK.md` has changed since chezmoi last wrote it?", which without a TTY
+   is a hard exit. The first apply on any machine could never show this, and CI
+   applies once. Fix: the file is not versioned; the `@RTK.md` line stays in
+   `CLAUDE.md` because rtk checks for it before appending its own. Verified in an
+   empty `HOME`: `rtk init --global --auto-patch` produces `RTK.md`, the
+   `settings.json` hook and the `CLAUDE.md` reference, nothing else under
+   `~/.claude`.
+20. **The nvm default alias was `lts/*`, so `.zshrc` took its slow path on every
+   shell.** `30-npm-global` runs `nvm install --lts` on a machine with no node, and
+   that command writes `default -> lts/*`. The `.zshrc` block resolves the alias
+   by globbing `~/.nvm/versions/node/v<alias>*`, which `lts/*` cannot match, so
+   every shell fell through to `nvm use`: 0.32 s startup against 0.08 s with a bare
+   major in the file, measured three times each. The block's comment claimed a
+   bare major "on both machines", which was true of the machine where it was
+   written and of nothing the script produced. Fix: `30-npm-global` pins the alias
+   to the installed major after the install line, idempotently.
+21. **`scripts/check-templates.sh` failed on any initialised machine.**
+   `promptChoiceOnce` reads its answer from the config file at the default
+   location before it consults `--promptChoice`, and `--config-path` pointing
+   elsewhere does not stop it. On a machine whose `~/.config/chezmoi/chezmoi.toml`
+   says `owned`, the `managed` pass rendered as `owned` and the guard added for
+   defect 15 caught it - correctly, and on every run, so the gate was red by
+   design everywhere except CI, whose `HOME` is empty. Fix: the `init` call runs
+   under `HOME="$tmp/home-$profile"`.
+22. **`herdr is not installed, skipping` was the honest output of a declared gap.**
+   The open question said "find the upstream install method"; herdr.dev documents
+   `brew install herdr` beside the `curl | sh` route, and homebrew-core carries the
+   formula at 0.9.1. Declared in `packages.yaml`. CI now asserts its hook alongside
+   the other four instead of excusing its absence.
+
+Four more things in that scrollback are the machine's, not the repository's, and
+are recorded here only so nobody hunts for them in the scripts: a shell with
+`/opt/homebrew/Cellar/node/24.7.0/bin` exported by hand, which broke every
+`#!/usr/bin/env node` hook the moment `brew` upgraded `simdjson` under it; a
+root-owned `/opt/homebrew/lib/node_modules/npm` from a `sudo npm i -g` in 2025,
+which fails `brew postinstall node`; a `dicklesworthstone/tap` left behind by the
+dropped `beads`; and two user-level MCP servers in `~/.claude.json` (`serena`,
+`codegraph`) pointing at binaries that are not there.
+
 ---
 
 ## Phase 0: Repository skeleton
@@ -404,7 +457,9 @@ stay editable in place.
       declared what that command renders, so a fresh machine got ccstatusline's
       default layout
 - [~] Add `symlink_*.tmpl` entries pointing at `{{ .chezmoi.sourceDir }}/../live/...`
-- [~] Add managed files: `~/.claude/CLAUDE.md`, `~/.claude/RTK.md`
+- [~] Add managed files: `~/.claude/CLAUDE.md`. Corrected 2026-09-18: `RTK.md`
+      was listed here and versioned, but `rtk init --global` writes it; the copy
+      in git was rtk's own text from an older release. Dropped, see defect 19
 - [~] Handle `~/.claude/settings.json` with a `modify_` merge script rather than a
       copy. Corrected 2026-09-17: the file has three authors, so copying it
       versioned somebody else's output. 13 of its 15 top-level keys are ours;
@@ -653,14 +708,11 @@ half the toolbox. The ordering above exists precisely to prevent that.
       Decide in phase 7 whether `whistle` moves to an npm global under mise, or
       whether the Homebrew `node` stays as an accepted private dependency of one
       formula. Do not try to make Homebrew's `node` the mise-managed one.
-- [ ] `treehouse`, `no-mistakes` and `herdr` are standalone binaries in
-      `~/.local/bin` with no declared installer. Find their upstream install
-      method, or accept them as a documented manual step. `atuin` and `bun` were in
-      the same category and are now Homebrew formulae; these three are what is left.
-      **herdr is the one that costs something today:** this repository symlinks its
-      config, installs its hook and restores its skill, but installs nothing. On a
-      fresh machine `run_after_60` prints `herdr is not installed, skipping` and
-      moves on. `claude` itself is in the same position - the whole agent layer is
+- [ ] `treehouse` and `no-mistakes` are standalone binaries in `~/.local/bin`
+      with no declared installer. Find their upstream install method, or accept
+      them as a documented manual step. `atuin`, `bun` and `herdr` were in the
+      same category and are now Homebrew formulae; these two are what is left.
+      `claude` itself is in the same position - the whole agent layer is
       configured for a binary no channel installs.
 - [ ] `create-tasks-workspace` and `no-mistakes` have no entry in
       `.skill-lock.json` (defect 8). Find their source, accept them as manual, or
@@ -738,3 +790,6 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-18 | `~/.wezterm.lua` removed via `.chezmoiremove`, its contents merged into `live/wezterm/wezterm.lua` | WezTerm resolves `~/.wezterm.lua` before `~/.config/wezterm/wezterm.lua` and stops at the first hit. The symlink this repository creates was therefore inert: apply succeeded, `chezmoi diff` was empty, and the terminal kept the unversioned file. Two configurations also drifted - a fix had to be written twice to reach both machines |
 | 2026-09-18 | WezTerm keeps the hand-built iTerm2 palette; the Dracula scheme is dropped | The stated reason for Dracula was one palette across the window, but herdr emits its own Dracula in truecolor (`38:2::` throughout its output) and never reads the terminal's ANSI palette. A scheme here would only recolour the shell, `ls`, `git` and Neovim, against a background that was chosen deliberately |
 | 2026-09-18 | Dim text (SGR 2) given an explicit colour through `font_rules` | WezTerm implements `Intensity=Half` by substituting a lighter face and leaving the colour alone. JetBrains Mono ships ExtraLight, so Claude Code's input suggestion rendered at full foreground and read as text already typed. The rules pin the regular weight and set `foreground` to the foreground blended halfway into the background. Note for whoever edits this next: `foreground` belongs to the `TextStyle` that `wezterm.font*` returns, not to the attributes table passed into it, which discards unknown keys without an error |
+| 2026-09-18 | `herdr` is a Homebrew formula, not a manual step | Upstream documents `brew install herdr` as a first-class route and homebrew-core carries it. Moving from the open question closes the only case where this repository configured a tool it did not install: the config symlink, the hook installer and the skill restore all had a binary to point at only if a human had run `curl \| sh` first. The `managed` machine's `~/.local/bin/herdr` must go by hand, because `~/.local/bin` precedes the Homebrew prefix on `PATH` |
+| 2026-09-18 | `~/.claude/RTK.md` is not versioned | It is written by `rtk init --global`, which this repository runs on every apply. Same category as the hooks: a vendored copy tracks nothing and loses to the tool on the next run, and here it also made the second apply fail. Defect 19 |
+| 2026-09-18 | `30-npm-global` pins the nvm default alias to a bare major | `nvm install --lts` writes `lts/*`, which the `.zshrc` fast path cannot expand; the fallback costs 0.24 s per shell and per subshell. The script already chooses the version, so it also records it in the form the shell can read without nvm. Defect 20 |

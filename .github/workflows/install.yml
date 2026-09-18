@@ -120,8 +120,8 @@ jobs:
       # is the only place that proves each tool's installer still exists and still
       # takes the arguments the script passes it.
       #
-      # herdr is expected to be absent: no install channel declares it, so its hook
-      # is skipped. That is tracked as an open question, not as a test gap.
+      # herdr's hook is the one file on disk, ~/.claude/hooks/herdr-agent-state.sh;
+      # the path contains the tool name, so the same substring test covers it.
       - name: Assert each tool installed its own hook
         run: |
           set -euo pipefail
@@ -134,7 +134,7 @@ jobs:
           jq -e '.hooks | length > 0' "$s" >/dev/null \
             || fail "no tool installed a hook; settings.json has no hooks block"
 
-          for tool in atuin rtk gh-axi chrome-devtools-axi; do
+          for tool in herdr atuin rtk gh-axi chrome-devtools-axi; do
             jq -e --arg t "$tool" \
               '[.hooks[][]? | .hooks[]? | .command // ""] | map(select(contains($t))) | length > 0' \
               "$s" >/dev/null || fail "$tool did not install its hook"

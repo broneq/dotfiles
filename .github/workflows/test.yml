@@ -135,7 +135,7 @@ jobs:
             [ -L "$FAKE_HOME/$link" ] || fail "$link is not a symlink"
             [ -e "$FAKE_HOME/$link" ] || fail "$link is a symlink to nothing"
           done
-          for f in .zshrc .zprofile .gitconfig .claude/CLAUDE.md .claude/RTK.md \
+          for f in .zshrc .zprofile .gitconfig .claude/CLAUDE.md \
                    .claude/settings.json .agents/.skill-lock.json \
                    .config/git-identity/profiles.json \
                    .config/git-identity/private.gitconfig; do
@@ -156,7 +156,7 @@ jobs:
           # The .claude directory holds gigabytes of runtime state. Only authored
           # files may appear. Symlinks are not counted by -type f.
           count="$(find "$FAKE_HOME/.claude" -type f | wc -l | tr -d ' ')"
-          [ "$count" -eq 3 ] || fail "expected 3 authored files under .claude, found $count"
+          [ "$count" -eq 2 ] || fail "expected 2 authored files under .claude, found $count"
 
       - name: Assert the merge kept the other authors
         run: |

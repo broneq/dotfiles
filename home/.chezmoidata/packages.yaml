@@ -25,6 +25,7 @@ packages:
       - git-filter-repo
       - go
       - graphviz
+      - herdr           # agent multiplexer; was a curl|sh standalone in ~/.local/bin
       - htop
       - midnight-commander
       - mkcert

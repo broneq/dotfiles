@@ -61,8 +61,7 @@ home/dot_config/symlink_nvim.tmpl   ->  {{ .chezmoi.sourceDir }}/../live/nvim
 ```
 
 **chezmoi-managed file or template** when only a human writes it: `.zshrc`,
-`.zprofile`, `.gitconfig`, `dot_claude/CLAUDE.md`, `dot_claude/RTK.md`, the herdr
-hook.
+`.zprofile`, `.gitconfig`, `dot_claude/CLAUDE.md`.
 
 **Merge into, never copy over**, when a file has more than one author. Two
 qualify, and both use a `modify_` script: chezmoi hands it the current target file
@@ -179,9 +178,13 @@ idempotent and cheap, so they run on every apply.
 ### Whitelisting, never directory-adding
 
 `~/.claude` holds `projects/` (1.5 GB), `plugins/` (53 MB) and `jobs/` (33 MB).
-Three files land there from this repository: `CLAUDE.md` and `RTK.md` as copies,
-and `settings.json` as a merge. The CI apply job asserts that count, so adding a
-fourth is a deliberate act that fails the build until the assertion is updated.
+Two files land there from this repository: `CLAUDE.md` as a copy and
+`settings.json` as a merge. The CI apply job asserts that count, so adding a third
+is a deliberate act that fails the build until the assertion is updated. `RTK.md`
+sits next to them but is rtk's: `rtk init --global` writes it, and the copy this
+repository once carried was rtk's own text from an older release, which the
+newer binary overwrote on the first apply and chezmoi then refused to touch on
+the second.
 
 `~/.config/nvim` and `~/.config/wezterm` are the exception: both are clean.
 Neovim keeps plugin payloads in `stdpath("data")`, outside the config directory,
@@ -408,6 +411,4 @@ appdir:` being honoured, and nothing short of installing the cask can show that.
   privileges, MDM, `dsmemberutil` reporting no membership: not reproducible. The
   abort path in `assert-profile` could only be reached with a fake `dsmemberutil`
   on `PATH`, which is testing the fake.
-- **herdr.** No channel installs it, so its hook is always skipped. An open
-  question in the roadmap, not a gap in the tests.
 - **A receipt-less `WezTerm.app`.** State of one machine, not of the repository.
