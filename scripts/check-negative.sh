@@ -216,6 +216,16 @@ PLANT
 expect_rejected check.sh "without exporting NVM_DIR first" \
 	"NVM_DIR exported after the nvm.sh line is rejected"
 
+# --- 11. a versioned gh configuration directory ------------------------------
+
+new_sandbox
+plant home/dot_config/gh-private/hosts.yml <<'PLANT'
+github.com:
+    user: someone
+PLANT
+expect_rejected check.sh "a gh configuration directory is versioned" \
+	"a versioned gh config directory is rejected"
+
 # --- verdict ------------------------------------------------------------------
 echo
 if [ "$failures" -gt 0 ]; then

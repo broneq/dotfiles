@@ -1,0 +1,21 @@
+{{/*
+The commit identity `/git-identity:use private` points GIT_CONFIG_GLOBAL at.
+
+The [include] line comes first on purpose, and is the reason this file is a
+template rather than a copy: GIT_CONFIG_GLOBAL *replaces* the global config
+rather than layering onto it, so without the include every other setting -
+core.autocrlf, init.defaultBranch, aliases - silently disappears in any project
+bound to this profile. Only the [user] block below is meant to win.
+
+On `managed` this is the point of the whole plugin: personal work on the work Mac
+commits as the personal address instead of the employer one. On `owned` the
+machine default is already this address, so the file is a no-op - kept anyway, so
+both Macs answer `/git-identity:use private` identically and the registry needs no
+branch.
+*/ -}}
+[include]
+	path = {{ .chezmoi.homeDir }}/.gitconfig
+
+[user]
+	name = {{ .identity.name }}
+	email = {{ .identity.personalEmail }}

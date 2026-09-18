@@ -468,10 +468,19 @@ the directory instead of its files would pull in 1.5 GB.
 **Goal:** one repo, correct identity and package set on both machines.
 
 - [~] Add `~/.gitconfig` as a template; email switches on `.profile`
+- [~] Move both addresses into `.chezmoidata/identity.yaml`, so the machine
+      default and the `private` profile override cannot drift apart
 - [ ] Confirm the profile-driven split renders correctly for both values
       (`chezmoi execute-template` against each)
 - [~] Document in `README.md` how to bootstrap the second machine, and every step
       that stays manual
+- [~] Version the `git-identity` layer: the `private` profile registry as a
+      `modify_` merge, its gitconfig as a template, the plugin as an
+      `enabledPlugins` entry. `~/.config/gh-private` stays out; see the decisions
+      log
+- [ ] Confirm on the second machine that `/git-identity:use private` binds a
+      project and `git config user.email` follows, after the manual `gh auth login`
+      documented in `README.md`
 
 **Done when:** `chezmoi execute-template` with `profile=managed` produces a
 Brewfile containing `cask_args appdir:`, and with `profile=owned` does not.
@@ -716,3 +725,8 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-18 | `enabledPlugins` cut to `bdk` and `caveman` | Dropped: `skill-creator`, `frontend-design`, `elements-of-style` and the two already-disabled entries. It also closed a latent defect rather than fixing it: `elements-of-style@superpowers-marketplace` was enabled while `superpowers-marketplace` was registered only in `~/.claude/plugins/known_marketplaces.json`, runtime state that no fresh machine has, so that plugin could never have installed on the second Mac. With it gone, `extraKnownMarketplaces` needs only the two marketplaces the two surviving plugins come from |
 | 2026-09-18 | A plugin is removed from the machine by hand, not by the merge script | jq's `*` adds and overwrites keys and never deletes one, so every plugin dropped above stays installed and enabled on this Mac until `claude plugin uninstall` runs. The alternative - having the script compute the exact `enabledPlugins` and overwrite it - would mean this repository asserting authority over a key Claude Code's own UI also writes, which is the failure the merge exists to avoid. So the divergence is accepted and recorded instead: the declaration is what a fresh machine gets, the live machine is converged by hand |
 | 2026-09-18 | `~/.config/ccstatusline/settings.json` symlinked into `live/`, not managed | ccstatusline is configured through its own TUI, which rewrites the file whole, `id` UUIDs and all. A managed file would revert every change made the way the tool expects. Same category as `~/.config/herdr/config.toml`. Accepted cost: the regenerated UUIDs make diffs noisier than the edit that caused them |
+| 2026-09-18 | `git-identity` versioned as a plugin declaration plus two files under `~/.config/git-identity`, and nothing else | The plugin comes from the `bdk` marketplace already declared in `extraKnownMarketplaces`, and ships its own `SessionStart` hook, so enabling it is one `enabledPlugins` key and no script. What a fresh machine cannot derive is the registry and the per-profile gitconfig - both are declarations a human curates, both carry absolute home paths, so both are templates rather than copies |
+| 2026-09-18 | `~/.config/gh-private` is never versioned | `hosts.yml` is written by `gh auth login` and the token it refers to lives in the login keychain, which this repository does not and must not reproduce. Committing it gives the second machine a file asserting an authenticated session that does not exist: `gh` then reports a login instead of offering one, and every call returns 401. `config.yml` is `gh`'s own generated file, rewritten with a fresh comment banner on upgrades, and holds one authored line (`aliases.co`); the default `~/.config/gh` is unmanaged for the same reason, and managing only the private twin would be an asymmetry with no payoff. The login is a manual bootstrap step in `README.md`, alongside the other five |
+| 2026-09-18 | `profiles.json` merged by `modify_profiles.json.tmpl`, not managed outright | Same two-author shape as `settings.json`: this repository declares `private`, while `/git-identity:profile-add` may add a client or second-account profile on one machine only. A managed file would delete those on the next apply, and silently - the gh config directory and the profile gitconfig both survive, so the only symptom is `/git-identity:use` reporting that a profile which plainly exists does not |
+| 2026-09-18 | Commit addresses moved into `.chezmoidata/identity.yaml` | `dot_gitconfig.tmpl` and `private.gitconfig.tmpl` need the same personal address. Two literals that must agree, changed months apart, produce commits attributed to a stale address in exactly the projects bound to a profile - and nothing reports it. Same argument, and the same file location, as `packages.yaml` |
+| 2026-09-18 | `check-templates.sh` globs `modify_*.tmpl` instead of naming them | The list had one entry and gained a second. A `modify_` script that no gate renders is a script whose first execution is on the machine, against the real file it was written to protect |

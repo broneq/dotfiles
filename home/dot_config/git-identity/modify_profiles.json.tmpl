@@ -1,0 +1,66 @@
+#!/bin/sh
+#
+# Merge the git-identity profiles this repository owns into
+# ~/.config/git-identity/profiles.json.
+#
+# A `modify_` script receives the current target file on stdin and writes the new
+# content to stdout, so chezmoi never overwrites the file wholesale. That matters
+# here because the registry has two authors:
+#
+#   - this repository: the `private` profile, which both Macs must have
+#   - `/git-identity:profile-add`: any profile added ad hoc on one machine, for a
+#     client or a second account, which has no business being declared here
+#
+# Managing the file outright would delete the second author's profiles on the next
+# `chezmoi apply`, and nothing would report it: the gh config directory and the
+# per-profile gitconfig both survive, so the only symptom is `/git-identity:use`
+# claiming a profile that plainly exists does not. Merging keeps each author's part.
+#
+# The absolute paths below are why this is a template at all. Two usernames exist
+# across the two machines, and neither `gh` nor `git` expands a tilde out of
+# GH_CONFIG_DIR or GIT_CONFIG_GLOBAL - the value has to be absolute and correct for
+# this machine.
+
+set -eu
+
+current="$(cat)"
+
+# The registry is a declaration, not a cache: when it does not exist yet there is
+# nothing to preserve, so emit ours directly. This also keeps a fresh machine
+# working before jq is installed, which is the case `chezmoi apply` hits first.
+if [ -z "$current" ] || ! command -v jq >/dev/null 2>&1; then
+	if [ -n "$current" ]; then
+		# A file exists but jq does not. Passing it through unchanged loses the
+		# `private` declaration until jq arrives; destroying somebody's other
+		# profiles to avoid that is the worse trade.
+		printf '%s' "$current"
+		exit 0
+	fi
+	cat <<'EOF'
+{
+  "version": 1,
+  "profiles": {
+    "private": {
+      "ghConfigDir": "{{ .chezmoi.homeDir }}/.config/gh-private",
+      "gitConfig": "{{ .chezmoi.homeDir }}/.config/git-identity/private.gitconfig",
+      "login": "broneq"
+    }
+  }
+}
+EOF
+	exit 0
+fi
+
+# jq's `*` recurses into objects, so this merges into `.profiles` rather than
+# replacing it - every profile but `private` is left exactly as it was.
+printf '%s' "$current" | jq --sort-keys '
+  (if type == "object" then . else {} end) * {
+    "version": 1,
+    "profiles": {
+      "private": {
+        "ghConfigDir": "{{ .chezmoi.homeDir }}/.config/gh-private",
+        "gitConfig": "{{ .chezmoi.homeDir }}/.config/git-identity/private.gitconfig",
+        "login": "broneq"
+      }
+    }
+  }'

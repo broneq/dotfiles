@@ -60,7 +60,7 @@ on an account without admin group membership.
 
 ## What is not automated
 
-Four things are deliberately manual. Each one is a decision, not an omission.
+Six things are deliberately manual. Each one is a decision, not an omission.
 
 1. **Installing chezmoi and Homebrew.** See above.
 2. **The GitHub repository.** CI lives in `.github/workflows/test.yml` and runs
@@ -73,7 +73,27 @@ Four things are deliberately manual. Each one is a decision, not an omission.
 4. **Two agent skills.** `create-tasks-workspace` and `no-mistakes` are present in
    `~/.agents/skills` but have no entry in `.skill-lock.json`, so there is no
    source to restore them from. The other thirteen restore automatically.
-5. **`herdr` and `claude` themselves.** Both are standalone binaries in
+5. **Logging the `private` git identity in.** The `git-identity` plugin is
+   declared in `settings.json` and its `private` profile is written to
+   `~/.config/git-identity/profiles.json`, but the profile points at a `gh` config
+   directory that only a browser OAuth flow can fill:
+
+   ```sh
+   GH_CONFIG_DIR=~/.config/gh-private gh auth login
+   GH_CONFIG_DIR=~/.config/gh-private gh auth setup-git
+   ```
+
+   The second command is not optional. macOS sets `credential.helper = osxkeychain`
+   in the system git config, which caches whichever token it saw first for
+   github.com and hands it to every profile afterwards; `gh auth setup-git` writes a
+   per-host entry that resets that list. Skip it and you get a profile that reads
+   correctly and pushes as the wrong account.
+
+   `~/.config/gh-private` itself is never versioned - see the decisions log. Bind a
+   project to the profile afterwards with `/git-identity:use private`, which writes
+   `.claude/settings.local.json`; that file holds absolute paths from one machine's
+   home directory and stays out of every repository.
+6. **`herdr` and `claude` themselves.** Both are standalone binaries in
    `~/.local/bin` and no install channel declares them. This repository symlinks
    herdr's config, installs its Claude Code hook and restores its skill, but does
    not put the binary on the machine; the hooks script prints

@@ -120,11 +120,27 @@ symlink, and edits made in either place are the same bytes.
 **chezmoi-managed file or template** when only a human writes it: `~/.zshrc`,
 `~/.zprofile`, `~/.gitconfig`, `~/.claude/CLAUDE.md`, `~/.claude/RTK.md`.
 
-**Merge, never copy**, when the file has more than one author.
-`~/.claude/settings.json` is written by Claude Code, by this repository, and by
-five installed tools. It is handled by `modify_settings.json.tmpl`, which merges
-the keys this repository owns and leaves every other key alone. Never
-`chezmoi add` or `re-add` it. See `.claude/rules/claude-config-sync.md`.
+**Merge, never copy**, when the file has more than one author. Two files qualify,
+and neither may ever be `chezmoi add`ed or `re-add`ed:
+
+- `~/.claude/settings.json`, written by Claude Code, by this repository, and by
+  five installed tools. `modify_settings.json.tmpl` merges the keys this
+  repository owns and leaves every other key alone. See
+  `.claude/rules/claude-config-sync.md`.
+- `~/.config/git-identity/profiles.json`, where this repository declares the
+  `private` profile and `/git-identity:profile-add` may add others on one machine
+  only. `modify_profiles.json.tmpl` replaces that one entry and leaves its
+  siblings. Managing it outright deletes them silently: the gh config directory
+  and the profile gitconfig survive a lost registry entry, so the only symptom is
+  `/git-identity:use` denying a profile that plainly exists.
+
+**A `gh` configuration directory is never versioned.** `~/.config/gh` and
+`~/.config/gh-private` are written by `gh auth login`; the token lives in the login
+keychain, which no repository carries. A committed `hosts.yml` makes another
+machine believe it holds a session it does not, and when the keychain is
+unavailable `gh` writes the token into that file instead - into a public
+repository. Logging in is a manual bootstrap step in `README.md`. Enforced by
+`scripts/check.sh`.
 
 **A tool's own integration is not authored configuration.** Hooks are installed by
 the tools that own them (`herdr integration install`, `atuin hook install`,

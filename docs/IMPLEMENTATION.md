@@ -16,6 +16,7 @@ here, the sentence belongs in the roadmap instead.
 home/
   .chezmoi.toml.tmpl         profile prompt and sourceDir, evaluated at `chezmoi init`
   .chezmoidata/packages.yaml the only place package names appear
+  .chezmoidata/identity.yaml the only place commit addresses appear
   .chezmoiremove             paths chezmoi deletes from the destination
   .chezmoiscripts/           install scripts, never part of the file tree
   dot_zshrc.tmpl             \
@@ -24,6 +25,7 @@ home/
   dot_claude/…                |
   dot_agents/…               /
   dot_config/symlink_*.tmpl  links pointing back into live/
+  dot_config/git-identity/   the `private` profile: registry merge + its gitconfig
 live/                        real files the applications rewrite in place
 scripts/check.sh             mechanical guardrails; needs nothing installed
 scripts/check-templates.sh   renders every template under both profiles, shellchecks it
@@ -62,12 +64,64 @@ home/dot_config/symlink_nvim.tmpl   ->  {{ .chezmoi.sourceDir }}/../live/nvim
 `.zprofile`, `.gitconfig`, `dot_claude/CLAUDE.md`, `dot_claude/RTK.md`, the herdr
 hook.
 
-**Merge into, never copy over**, when a file has more than one author.
-`~/.claude/settings.json` is the only one, and it has three: this repository,
-Claude Code, and five installed tools. `modify_settings.json.tmpl` receives the
-current file on stdin and writes the merged result to stdout, so chezmoi never
-overwrites what the other authors put there. `.claude/rules/claude-config-sync.md`
-has the key-by-key split.
+**Merge into, never copy over**, when a file has more than one author. Two
+qualify, and both use a `modify_` script: chezmoi hands it the current target file
+on stdin and takes the new content from stdout, so nothing this repository does
+not own is ever overwritten.
+
+`~/.claude/settings.json` has three authors - this repository, Claude Code, and
+five installed tools. `modify_settings.json.tmpl` merges the keys listed in
+`.claude/rules/claude-config-sync.md` and leaves the rest alone.
+
+`~/.config/git-identity/profiles.json` has two. This repository declares the
+`private` profile, which both Macs need; `/git-identity:profile-add` writes any
+further profile, for a client or a second account, on whichever machine needed it.
+`modify_profiles.json.tmpl` merges with jq's `*`, which recurses into objects and
+so replaces `.profiles.private` while leaving every sibling key untouched. Managing
+the file outright would delete those siblings on the next apply and report nothing:
+the gh config directory and the profile gitconfig both survive a lost registry
+entry, so the only symptom is `/git-identity:use` denying that a profile which
+plainly exists is there.
+
+Both scripts degrade rather than destroy when `jq` is missing, which on a fresh
+machine is the state `chezmoi apply` meets first: `modify_settings.json.tmpl` passes
+the file through untouched, and `modify_profiles.json.tmpl` does the same unless the
+registry does not exist at all, in which case there is nothing to preserve and it
+emits the declaration directly.
+
+### The git identity layer
+
+`git-identity` is a Claude Code plugin from the `bdk` marketplace. It stores one
+directory per GitHub account and points `GH_CONFIG_DIR` and `GIT_CONFIG_GLOBAL` at
+the right pair through a project's `.claude/settings.local.json`, which Claude Code
+applies to every subprocess - so `gh`, `gh-axi` and `git` all follow it without
+anything having to be remembered.
+
+Three of the four pieces are versioned:
+
+| Piece | Handling | Why |
+|---|---|---|
+| the plugin | `enabledPlugins` key | the marketplace is already declared, and the plugin ships its own `SessionStart` hook |
+| `profiles.json` | `modify_` merge | two authors; see above |
+| `private.gitconfig` | template | absolute `[include]` path; a copy would break on the other username |
+| `~/.config/gh-private/` | **not versioned** | `gh auth login` writes it and the token lives in the login keychain |
+
+`private.gitconfig` opens with `[include] path = <home>/.gitconfig`, and that line
+is load-bearing: `GIT_CONFIG_GLOBAL` *replaces* the global config rather than
+layering onto it, so without the include, `core.autocrlf`, `init.defaultBranch` and
+every alias vanish in any project bound to a profile, while the identity - the one
+thing anybody would check - looks right.
+
+The addresses themselves come from `.chezmoidata/identity.yaml` because two
+templates need the same one. `dot_gitconfig.tmpl` picks work or personal by
+`.profile`; `private.gitconfig.tmpl` always takes personal. A stale duplicate in
+either would misattribute commits in exactly the projects that were bound on
+purpose.
+
+The unversioned quarter is the reason `README.md` lists a manual `gh auth login`.
+Committing `gh-private/hosts.yml` would not save that step: the file names an
+authenticated user whose token is in a keychain no repository can carry, so `gh`
+on a fresh machine would stop offering a login and start returning 401.
 
 ### Hooks belong to their tools
 

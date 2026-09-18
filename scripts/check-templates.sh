@@ -72,7 +72,10 @@ for profile in managed owned; do
 		continue
 	fi
 
-	for tmpl in home/.chezmoiscripts/*.sh.tmpl home/dot_claude/modify_settings.json.tmpl; do
+	# Globbed, not listed: a `modify_` script that nothing renders is a script that
+	# breaks on the machine and nowhere else. Adding one must not also require
+	# remembering to add it here.
+	for tmpl in home/.chezmoiscripts/*.sh.tmpl home/dot_*/modify_*.tmpl home/dot_*/*/modify_*.tmpl; do
 		[ -f "$tmpl" ] || continue
 		name="$(basename "${tmpl%.tmpl}")"
 		out="$tmp/$profile-$name"

@@ -172,6 +172,26 @@ if [ "$nvm_bad" -eq 0 ]; then
 	pass "every nvm.sh user exports NVM_DIR first"
 fi
 
+# --- 8. No gh configuration directory ------------------------------------------
+# `gh auth login` owns everything under a GH_CONFIG_DIR. `hosts.yml` records which
+# account is authenticated while the token itself sits in the login keychain, so a
+# committed copy gives another machine a file asserting a session it does not have:
+# gh stops offering a login and starts returning 401.
+#
+# It is also the one path in this repository where a secret can arrive by accident.
+# When the keychain is unavailable - a CI runner, a headless login, `GH_TOKEN` in
+# the environment - gh writes `oauth_token:` into hosts.yml instead, and this
+# repository is public. Check 6 would catch a `ghp_` string, but not the `gho_`
+# and `ghu_` forms a browser login produces.
+#
+# Matches a path segment of `gh` or `gh-<something>` anywhere under home/, with any
+# chezmoi attribute prefix (`private_`, `symlink_`) in front of it.
+if git ls-files -- home | grep -E '(^|/)[a-z_]*gh(-[A-Za-z0-9._-]+)?(/|$)' >"$tmp/hits" 2>/dev/null; then
+	report "a gh configuration directory is versioned (auth state, not authored config):"
+else
+	pass "no gh configuration directory is versioned"
+fi
+
 # --- verdict ------------------------------------------------------------------
 echo
 if [ "$failures" -gt 0 ]; then

@@ -78,6 +78,25 @@ jobs:
             "someOtherTool": { "keepMe": true }
           }
           JSON
+          # Same reasoning for the git-identity registry: on an empty HOME the
+          # merge has nothing to preserve, so the half that matters - leaving
+          # another machine's ad hoc profile alone - never executes. The `private`
+          # entry is seeded stale on purpose; ours has to win it.
+          mkdir -p "$fake/.config/git-identity"
+          cat >"$fake/.config/git-identity/profiles.json" <<'JSON'
+          {
+            "version": 1,
+            "profiles": {
+              "client-acme": {
+                "ghConfigDir": "/tmp/gh-client-acme",
+                "gitConfig": "/tmp/client-acme.gitconfig",
+                "login": "someone-else"
+              },
+              "private": { "ghConfigDir": "/stale", "gitConfig": "/stale", "login": "stale" }
+            }
+          }
+          JSON
+
           echo "FAKE_HOME=$fake" >>"$GITHUB_ENV"
 
       # --promptChoice is keyed on the prompt TEXT, not on the field it fills.
@@ -117,9 +136,16 @@ jobs:
             [ -e "$FAKE_HOME/$link" ] || fail "$link is a symlink to nothing"
           done
           for f in .zshrc .zprofile .gitconfig .claude/CLAUDE.md .claude/RTK.md \
-                   .claude/settings.json .agents/.skill-lock.json; do
+                   .claude/settings.json .agents/.skill-lock.json \
+                   .config/git-identity/profiles.json \
+                   .config/git-identity/private.gitconfig; do
             [ -f "$FAKE_HOME/$f" ] || fail "$f missing"
           done
+
+          # gh owns every GH_CONFIG_DIR. chezmoi creating one would mean a token
+          # store, or a file claiming a session that has none, arrived from git.
+          [ -z "$(find "$FAKE_HOME/.config" -maxdepth 1 -name 'gh' -o -maxdepth 1 -name 'gh-*')" ] \
+            || fail "chezmoi wrote a gh config directory; gh auth login owns those"
 
           jq -e '.extraKnownMarketplaces.bdk.source.path == $p' \
             --arg p "$FAKE_HOME/projects/bdk" \
@@ -165,6 +191,23 @@ jobs:
                  - ["claude-plugins-official"] | length == 0' "$s" >/dev/null \
             || fail "an enabled plugin comes from an undeclared marketplace"
 
+          jq -e '.enabledPlugins["git-identity@bdk"] == true' "$s" >/dev/null \
+            || fail "the git-identity plugin was not declared"
+
+          # The registry is the second merged file, and the failure it guards
+          # against is silent: a lost profile leaves its gh directory and its
+          # gitconfig behind, so nothing looks broken until /git-identity:use
+          # denies a profile that is plainly there.
+          r="$FAKE_HOME/.config/git-identity/profiles.json"
+          jq -e '.profiles["client-acme"].login == "someone-else"' "$r" >/dev/null \
+            || fail "the merge dropped a profile this repository does not own"
+          jq -e '.profiles.private.ghConfigDir == $p' \
+            --arg p "$FAKE_HOME/.config/gh-private" "$r" >/dev/null \
+            || fail "the private profile does not point at this machine's gh config dir"
+          jq -e '.profiles.private.gitConfig == $p' \
+            --arg p "$FAKE_HOME/.config/git-identity/private.gitconfig" "$r" >/dev/null \
+            || fail "the private profile does not point at this machine's gitconfig"
+
       # A modify_ script runs on every apply and rewrites the file each time. If it
       # is not byte-stable, chezmoi reports a change forever and `chezmoi diff`
       # stops being a usable review tool.
@@ -174,9 +217,12 @@ jobs:
           fail() { echo "::error::$1"; exit 1; }
 
           before="$(shasum -a 256 <"$FAKE_HOME/.claude/settings.json")"
+          rbefore="$(shasum -a 256 <"$FAKE_HOME/.config/git-identity/profiles.json")"
           env HOME="$FAKE_HOME" chezmoi apply --exclude=scripts --no-tty
           after="$(shasum -a 256 <"$FAKE_HOME/.claude/settings.json")"
+          rafter="$(shasum -a 256 <"$FAKE_HOME/.config/git-identity/profiles.json")"
           [ "$before" = "$after" ] || fail "the settings.json merge is not byte-stable"
+          [ "$rbefore" = "$rafter" ] || fail "the profiles.json merge is not byte-stable"
 
           out="$(env HOME="$FAKE_HOME" chezmoi diff --exclude=scripts --no-tty)"
           [ -z "$out" ] || { echo "$out" | head -40; fail "a second apply still has work to do"; }
@@ -221,6 +267,39 @@ jobs:
           [ -n "$mine" ] || fail "no git email was rendered for ${{ matrix.profile }}"
           [ "$mine" != "$theirs" ] \
             || fail "both profiles render the same git email, so the split does nothing"
+
+      # GIT_CONFIG_GLOBAL replaces the global config rather than layering onto it,
+      # so private.gitconfig's [include] line is load-bearing: drop it and every
+      # setting except the identity disappears in any project bound to the profile,
+      # while the identity - the one thing anybody checks - still reads correctly.
+      - name: Assert the private profile overrides the identity and keeps the rest
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          g="$FAKE_HOME/.config/git-identity/private.gitconfig"
+
+          # -u GIT_CONFIG_GLOBAL is not belt and braces. Anyone running this gate
+          # by hand inside a project bound with /git-identity:use has that variable
+          # exported into the session, and it outranks HOME: the unset read would
+          # return the profile's address, match the other one, and report a broken
+          # override on a working tree.
+          email="$(env HOME="$FAKE_HOME" GIT_CONFIG_GLOBAL="$g" \
+            git config --global --includes --get user.email)"
+          machine="$(env -u GIT_CONFIG_GLOBAL HOME="$FAKE_HOME" \
+            git config --global --includes --get user.email)"
+          crlf="$(env HOME="$FAKE_HOME" GIT_CONFIG_GLOBAL="$g" \
+            git config --global --includes --get core.autocrlf)"
+
+          [ "$crlf" = input ] \
+            || fail "the [include] does not resolve; the rest of the global config is gone"
+
+          if [ "${{ matrix.profile }}" = managed ]; then
+            [ "$email" != "$machine" ] \
+              || fail "the private profile did not override the work address"
+          else
+            [ "$email" = "$machine" ] \
+              || fail "on owned the machine default is already the private address"
+          fi
 
   skills:
     name: skill restore

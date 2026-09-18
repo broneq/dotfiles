@@ -1,0 +1,19 @@
+# One source of truth for the commit identities this toolbox writes.
+#
+# Two files need the same addresses and would otherwise drift apart silently:
+#
+#   - dot_gitconfig.tmpl          the machine default, switched on .profile
+#   - dot_config/git-identity/private.gitconfig.tmpl
+#                                 the per-project override the git-identity
+#                                 plugin points GIT_CONFIG_GLOBAL at
+#
+# Changing an address in one and not the other produces commits attributed to the
+# old one in every project bound to a profile - a failure nothing reports.
+#
+# These are public addresses on a public repository, by the same decision that
+# made the repository public. No credential belongs here.
+
+identity:
+  name: Przemysław Broniszewski
+  personalEmail: przemek@broniszewski.net
+  workEmail: przemyslaw.broniszewski@jit.team

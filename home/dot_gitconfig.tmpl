@@ -1,10 +1,13 @@
+{{/*
+The conditional stays on one line on purpose. Written as a block - `{{ if … -}}`
+around an indented `email =` - the whitespace trim eats the newline *and* the
+tab that follows it, so the rendered key lands flush against the left margin and
+the blank line before [core] disappears. git parses it either way, which is
+exactly why it went unnoticed.
+*/ -}}
 [user]
-	name = Przemysław Broniszewski
-{{ if eq .profile "owned" -}}
-	email = przemek@broniszewski.net
-{{ else -}}
-	email = przemyslaw.broniszewski@jit.team
-{{ end -}}
+	name = {{ .identity.name }}
+	email = {{ if eq .profile "owned" }}{{ .identity.personalEmail }}{{ else }}{{ .identity.workEmail }}{{ end }}
 
 [core]
 	autocrlf = input
