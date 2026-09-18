@@ -22,6 +22,38 @@ config.line_height = 1.1
 -- the tools that sit in the same window is worth more than a per-tool optimum.
 config.color_scheme = 'Dracula (Official)'
 
+-- Dim text (SGR 2) is what Claude Code draws its input suggestion with, and what
+-- most TUIs use for secondary labels. WezTerm implements Intensity=Half by
+-- swapping in a lighter face - JetBrains Mono ships ExtraLight, so it gets
+-- picked - and leaves the colour at full foreground. The suggestion then reads
+-- as text you already typed. These rules pin the regular weight and set the
+-- colour explicitly: foreground blended halfway into the background, which is
+-- what a terminal that dims by colour (iTerm2, Ghostty) produces.
+--
+-- `foreground` is a field of the TextStyle returned by wezterm.font*, not of the
+-- attributes table passed into it. Attributes silently drop unknown keys, so a
+-- colour written there is lost without any error.
+local scheme = wezterm.color.get_builtin_schemes()[config.color_scheme]
+local dim_fg = (function()
+  local fr, fg, fb = wezterm.color.parse(scheme.foreground):srgba_u8()
+  local br, bg, bb = wezterm.color.parse(scheme.background):srgba_u8()
+  return string.format('#%02x%02x%02x', (fr + br) // 2, (fg + bg) // 2, (fb + bb) // 2)
+end)()
+
+local function dim_style(attrs)
+  local style = wezterm.font_with_fallback({
+    'JetBrainsMono Nerd Font',
+    'Menlo',
+  }, attrs)
+  style.foreground = dim_fg
+  return style
+end
+
+config.font_rules = {
+  { intensity = 'Half', italic = false, font = dim_style({ weight = 'Regular' }) },
+  { intensity = 'Half', italic = true, font = dim_style({ weight = 'Regular', style = 'Italic' }) },
+}
+
 config.window_decorations = 'RESIZE'
 config.window_padding = { left = 8, right = 8, top = 8, bottom = 4 }
 config.use_fancy_tab_bar = false
