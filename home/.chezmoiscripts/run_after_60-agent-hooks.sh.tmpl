@@ -48,10 +48,13 @@ install_hook() {
 		printf 'hook: %s is not installed, skipping\n' "$tool" >&2
 		return 0
 	fi
-	if "$@" >/dev/null 2>&1; then
+	# `$tool` was shifted off `$@` above; it must be put back in front. Without it
+	# the command run is `integration install claude`, which does not exist, and
+	# every installer reports failure on every apply.
+	if "$tool" "$@" >/dev/null 2>&1; then
 		printf 'hook: %s\n' "$tool"
 	else
-		printf 'hook: %s failed to install its hook (%s)\n' "$tool" "$*" >&2
+		printf 'hook: %s failed to install its hook (%s %s)\n' "$tool" "$tool" "$*" >&2
 	fi
 }
 

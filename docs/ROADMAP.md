@@ -365,6 +365,15 @@ prior state or because it never runs apply a second time.
    formula at 0.9.1. Declared in `packages.yaml`. CI now asserts its hook alongside
    the other four instead of excusing its absence.
 
+23. **Every hook installer failed on every apply since `ccb0b38`.** The refactor
+   that moved the installer list into `packages.yaml` gave `install_hook` a
+   `shift` to separate the tool from its arguments, then ran `"$@"` without
+   putting the tool back: the command executed was `integration install claude`,
+   not `herdr integration install claude`. All five printed `failed to install
+   its hook` and the script exited 0, so `chezmoi apply` still reported success.
+   The hooks already on this machine masked it; a fresh machine would have got
+   none, and only the weekly `install.yml` would have said so. Found by reading
+   the scrollback of the apply that installed `openwhispr`. Fix: `"$tool" "$@"`.
 Four more things in that scrollback are the machine's, not the repository's, and
 are recorded here only so nobody hunts for them in the scripts: a shell with
 `/opt/homebrew/Cellar/node/24.7.0/bin` exported by hand, which broke every
