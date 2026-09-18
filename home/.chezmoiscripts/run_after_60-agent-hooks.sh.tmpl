@@ -5,10 +5,12 @@
 
 set -euo pipefail
 
-# Every one of these writes its own entry into ~/.claude/settings.json, and four
-# of the five need no file on disk at all - the hook is just the command name.
-# herdr is the exception: it ships a script and tracks its own version, which is
-# precisely why versioning a copy of that script here was the wrong move.
+# The list of tools and their installers lives in packages.yaml under
+# `agent_hooks`; this script names none of them. Every installer writes its own
+# entry into ~/.claude/settings.json, and four of the five need no file on disk at
+# all - the hook is just the command name. herdr is the exception: it ships a
+# script and tracks its own version, which is precisely why versioning a copy of
+# that script here was the wrong move.
 #
 # This is `run_after_`, not `run_onchange_after_`, and that is deliberate. A
 # run_onchange_ script re-runs only when its own rendered text changes, and this
@@ -53,12 +55,6 @@ install_hook() {
 	fi
 }
 
-install_hook herdr              herdr integration install claude
-install_hook atuin              atuin hook install claude-code
-# --auto-patch is not optional. Without it rtk asks "Patch existing settings.json?
-# [y/N]", answers itself with N because there is no TTY, prints a MANUAL STEP
-# block - and exits 0, so the caller records a success and no hook exists. Feeding
-# it "y" on stdin does not help; the flag is the only way.
-install_hook rtk                rtk init --global --auto-patch
-install_hook gh-axi             gh-axi setup hooks
-install_hook chrome-devtools-axi chrome-devtools-axi setup hooks
+{{ range .packages.agent_hooks -}}
+install_hook {{ .tool | quote }}{{ range .args }} {{ . | quote }}{{ end }}
+{{ end -}}

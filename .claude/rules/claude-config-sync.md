@@ -22,7 +22,7 @@ put there is lost.
 | Keys | Author | Versioned |
 |---|---|---|
 | `model`, `tui`, `permissions`, `statusLine`, `enabledPlugins`, `extraKnownMarketplaces`, `cleanupPeriodDays`, `autoCompactWindow`, the `auto*` and `skip*` flags | you | yes, in the `modify_` script |
-| `hooks` | `herdr`, `atuin`, `rtk`, `gh-axi`, `chrome-devtools-axi` | no - each tool reinstalls its own on every apply |
+| `hooks` | the tools listed under `agent_hooks` in `packages.yaml` | no - each tool reinstalls its own on every apply |
 | `autoMode` | Claude Code, generated per project | no |
 
 **Adding a setting** means editing the jq object in the `modify_` script. Do not
@@ -69,7 +69,8 @@ overwrites its file on update. A copy in git cannot know any of that, and
 `chezmoi apply` would keep reverting the tool's own upgrade.
 
 The declaration still exists, just in executable form: `packages.yaml` says which
-tools are installed, and the hooks script names the exact install command for each.
+tools are installed and, under `agent_hooks`, the exact install command for each.
+The hooks script renders that list and names no tool of its own.
 
 ## Why `autoMode` is not versioned
 

@@ -145,8 +145,9 @@ claude: current (v10) (~/.claude/hooks/herdr-agent-state.sh)
 
 So `run_after_60-agent-hooks.sh.tmpl` calls each tool's own installer instead. The
 declaration did not disappear, it changed form: `packages.yaml` says which tools
-exist, the script says how each one installs its hook, and both are executable
-rather than a snapshot.
+exist and, under `agent_hooks`, how each one installs its hook. The script names
+no tool of its own; it renders one `install_hook` line per entry, quoting every
+element of `args`, and adding a hook is a YAML change like adding a package.
 
 Two details of that script are not obvious and both were found by the first
 `install.yml` run, because both fail with a zero exit and a reassuring message:

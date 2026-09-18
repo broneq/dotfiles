@@ -61,3 +61,24 @@ packages:
 
   uv:
     - code-review-graph
+
+  # Claude Code hooks each tool installs for itself, in the order they run. See
+  # docs/IMPLEMENTATION.md, "Hooks belong to their tools". `args` is a list, not a
+  # string: the script quotes every element, so an argument with a space survives.
+  # Every installer is idempotent and runs on each apply; the script only checks
+  # that `tool` is on PATH first.
+  agent_hooks:
+    - tool: herdr
+      args: [integration, install, claude]
+    - tool: atuin
+      args: [hook, install, claude-code]
+    # --auto-patch is not optional. Without it rtk asks "Patch existing
+    # settings.json? [y/N]", answers itself N because there is no TTY, prints a
+    # MANUAL STEP block - and exits 0, so the caller records a success and no hook
+    # exists. Feeding "y" on stdin does not help; the flag is the only way.
+    - tool: rtk
+      args: [init, --global, --auto-patch]
+    - tool: gh-axi
+      args: [setup, hooks]
+    - tool: chrome-devtools-axi
+      args: [setup, hooks]
