@@ -28,6 +28,19 @@ if ! command -v jq >/dev/null 2>&1; then
 	exit 0
 fi
 
+# `extraKnownMarketplaces` plus `enabledPlugins` is the whole plugin install
+# mechanism: Claude Code syncs ~/.claude/plugins/installed_plugins.json against
+# the `enabledPlugins` of every settings.json on startup and installs what is
+# missing. A `claude plugin install` step in a run_onchange_ script would be an
+# imperative duplicate of this declaration, and its output - absolute install
+# paths and commit SHAs - is runtime state this repository must not version.
+#
+# Every marketplace an enabled plugin comes from has to be declared here, so the
+# two lists are kept in step: `claude-plugins-official` has no entry because no
+# plugin of its own is enabled any more, and it is also the one marketplace Claude
+# Code auto-installs by itself. A plugin listed `false` is not declared at all -
+# one that was never installed is already disabled, so the entry would only be a
+# comment. Those decisions live in docs/ROADMAP.md instead.
 printf '%s' "$current" | jq --sort-keys '. * {
   "model": "opus",
   "tui": "fullscreen",
@@ -46,12 +59,7 @@ printf '%s' "$current" | jq --sort-keys '. * {
   },
   "enabledPlugins": {
     "bdk@bdk": true,
-    "caveman@caveman": true,
-    "elements-of-style@superpowers-marketplace": true,
-    "frontend-design@claude-plugins-official": true,
-    "serena@claude-plugins-official": false,
-    "skill-creator@claude-plugins-official": true,
-    "superpowers@superpowers-marketplace": false
+    "caveman@caveman": true
   },
   "extraKnownMarketplaces": {
     "bdk": {

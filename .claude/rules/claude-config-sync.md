@@ -30,6 +30,37 @@ put there is lost.
 with a snapshot of the rendered result, which is the exact mistake the script
 exists to prevent.
 
+**Removing a setting does not remove it from the machine.** jq's `*` is a
+recursive merge: it adds and overwrites keys and never deletes one. Deleting an
+entry from the jq object stops a fresh machine from getting it and leaves every
+machine that already has it untouched - including nested entries such as one
+plugin inside `enabledPlugins`. When the live value has to go too, that is a
+separate manual step (`claude plugin uninstall`, or editing the file), and the
+removal belongs in the decisions log so the divergence is on the record rather
+than a surprise a year later.
+
+## Plugins are installed by being declared
+
+`enabledPlugins` and `extraKnownMarketplaces` are not a record of an install done
+elsewhere - they are the install. Claude Code syncs
+`~/.claude/plugins/installed_plugins.json` against the `enabledPlugins` of every
+settings.json on startup and installs whatever is missing.
+
+So two rules follow.
+
+**Every marketplace an enabled plugin comes from must be declared** alongside it,
+`claude-plugins-official` excepted because Claude Code auto-installs that one.
+Enabling a plugin from an undeclared marketplace works on the machine where that
+marketplace happens to be registered and silently fails on every other, because
+the registration lives in `~/.claude/plugins/known_marketplaces.json`, which is
+runtime state and is not versioned. The two lists move together: adding the last
+plugin from a marketplace adds the marketplace, removing it removes it.
+
+**Nothing in `.chezmoiscripts/` may call `claude plugin install`.** It would
+duplicate this declaration imperatively, and its output
+(`installed_plugins.json`, `known_marketplaces.json`) is runtime state - absolute
+paths, commit SHAs, timestamps.
+
 ## Why `hooks` is not versioned
 
 Four of the five hooks are a bare command name on `PATH`. Only herdr ships a

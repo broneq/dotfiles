@@ -96,22 +96,28 @@ and `bun` is a hard dependency of the `settings.json` status line
 | `~/.config/nvim/` | ~4 KB, 10 files | symlink directory |
 | `~/.config/wezterm/` | does not exist yet | symlink directory |
 | `~/.config/herdr/config.toml` | 132 B | symlink file |
+| `~/.config/ccstatusline/settings.json` | 2.0 KB | symlink file |
 | `~/.claude/CLAUDE.md` | 1.5 KB | managed file |
 | `~/.claude/RTK.md` | 964 B | managed file |
 | `~/.claude/settings.json` | 6.2 KB | **merge script** (`modify_`), 13 of 15 keys |
 | `~/.claude/hooks/herdr-agent-state.sh` | 3.0 KB | **not versioned**, installed by `herdr integration install` |
 | `~/.agents/.skill-lock.json` | 5.2 KB | managed file, drives skill restore |
 
-Total authored surface: about 20 files, under 60 KB.
+Total authored surface: about 21 files, under 60 KB.
+
+`~/.config/ccstatusline/settings.json` was added on 2026-09-18. It holds the
+whole three-line status line - git root, branch, model, context bar, session and
+weekly usage with their reset timers, version, free memory - and was the only
+half of `statusLine` not versioned: `settings.json` declared the command,
+nothing declared what the command renders.
 
 Corrected 2026-09-17: `~/.config/nvim` holds **10** files, not 7 -
 `find ~/.config/nvim -type f` returns `init.lua`, `lazy-lock.json`,
 `init.lua.bak`, two files under `lua/` and five under `lua/plugins/`. The lock file
 and the backup were not counted.
 
-The repository has **no git remote**. `git remote -v` returns nothing, so phase 6
-has nowhere to push a workflow. Creating that repository is a manual step,
-recorded in `README.md`.
+The remote is `git@github.com:broneq/dotfiles.git`, public, added on 2026-09-17.
+The survey above predates it and recorded no remote.
 
 ### Neovim
 
@@ -388,7 +394,10 @@ no-op.
 stay editable in place.
 
 - [~] Create `live/` and copy the real files there: `nvim/`, `wezterm/`,
-      `herdr/config.toml`
+      `herdr/config.toml`, `ccstatusline/settings.json`. The last was added
+      2026-09-18: `settings.json` declared the status line *command* and nothing
+      declared what that command renders, so a fresh machine got ccstatusline's
+      default layout
 - [~] Add `symlink_*.tmpl` entries pointing at `{{ .chezmoi.sourceDir }}/../live/...`
 - [~] Add managed files: `~/.claude/CLAUDE.md`, `~/.claude/RTK.md`
 - [~] Handle `~/.claude/settings.json` with a `modify_` merge script rather than a
@@ -493,7 +502,14 @@ in both directions.
       this script's failure aborts the apply before the hooks script runs
 - [ ] Confirm plugins restore from `settings.json` alone
       (`enabledPlugins` + `extraKnownMarketplaces`), with no need to reproduce
-      `installed_plugins.json` or the plugin cache
+      `installed_plugins.json` or the plugin cache. Established 2026-09-18 from
+      Claude Code 2.1.275 itself, which carries the strings
+      `Syncing installed_plugins.json with enabledPlugins from all settings.json
+      files`, `Failed to roll back enabledPlugins after install failure for` and a
+      `plugin prune` that removes *auto-installed* plugins - so declaring is
+      installing. Still unchecked because that is evidence about the binary, not a
+      fresh-machine run, which is what this box asks for. CI now asserts the
+      weaker invariant that no enabled plugin comes from an undeclared marketplace
 
 **Done when:** deleting `~/.agents/skills` and running `chezmoi apply` restores
 **13** skills, under the names they have today. Verified 2026-09-17 by rendering
@@ -696,3 +712,7 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-17 | The heavy install test is a separate weekly workflow, not a step in the fast one | Tens of minutes against seconds. Merging them makes the fast gate slow and the slow gate noisy. Weekly plus `workflow_dispatch` also means upstream regressions - a renamed formula, changed installer arguments - surface on their own rather than waiting for someone to remember |
 | 2026-09-17 | CI asserts each hook is present in `settings.json`, not that its installer exited 0 | Three of the five installers can succeed while installing nothing: rtk answers its own prompt with N and exits 0, and the two npm globals are simply absent from a non-interactive `PATH`, which reads identically to the legitimate herdr skip. An exit-status check would have passed on all three |
 | 2026-09-18 | `beads` and `hey` dropped from `packages.yaml` | Neither is used. `beads` is an issue tracker nothing in this toolbox invokes and `hey` an HTTP load generator with no current need. A declared package is a promise to reinstall it on every fresh machine; the cheapest time to stop making that promise is before the second machine exists. Removing the declaration does not uninstall either one - `--cleanup` stays forbidden on `managed`, so the live machine is left as it is |
+| 2026-09-18 | Plugins stay declared in `settings.json`; no `claude plugin install` step | `extraKnownMarketplaces` plus `enabledPlugins` already is the install mechanism - Claude Code syncs `installed_plugins.json` against every settings.json on startup and installs what is missing. A script calling the CLI would duplicate the declaration imperatively, and the CLI's own output (`installed_plugins.json`, `known_marketplaces.json`: absolute install paths, commit SHAs, timestamps) is runtime state this repository must not version |
+| 2026-09-18 | `enabledPlugins` cut to `bdk` and `caveman` | Dropped: `skill-creator`, `frontend-design`, `elements-of-style` and the two already-disabled entries. It also closed a latent defect rather than fixing it: `elements-of-style@superpowers-marketplace` was enabled while `superpowers-marketplace` was registered only in `~/.claude/plugins/known_marketplaces.json`, runtime state that no fresh machine has, so that plugin could never have installed on the second Mac. With it gone, `extraKnownMarketplaces` needs only the two marketplaces the two surviving plugins come from |
+| 2026-09-18 | A plugin is removed from the machine by hand, not by the merge script | jq's `*` adds and overwrites keys and never deletes one, so every plugin dropped above stays installed and enabled on this Mac until `claude plugin uninstall` runs. The alternative - having the script compute the exact `enabledPlugins` and overwrite it - would mean this repository asserting authority over a key Claude Code's own UI also writes, which is the failure the merge exists to avoid. So the divergence is accepted and recorded instead: the declaration is what a fresh machine gets, the live machine is converged by hand |
+| 2026-09-18 | `~/.config/ccstatusline/settings.json` symlinked into `live/`, not managed | ccstatusline is configured through its own TUI, which rewrites the file whole, `id` UUIDs and all. A managed file would revert every change made the way the tool expects. Same category as `~/.config/herdr/config.toml`. Accepted cost: the regenerated UUIDs make diffs noisier than the edit that caused them |

@@ -43,8 +43,14 @@ Decided by **who writes the file**, not by what it contains.
 
 **Symlink into `live/`** when the application rewrites the file and those edits
 should land in git: `~/.config/nvim`, `~/.config/wezterm`,
-`~/.config/herdr/config.toml`. chezmoi creates a symlink; editing either path
-touches the same bytes, with no `chezmoi apply` round trip.
+`~/.config/herdr/config.toml`, `~/.config/ccstatusline/settings.json`. chezmoi
+creates a symlink; editing either path touches the same bytes, with no
+`chezmoi apply` round trip.
+
+ccstatusline belongs here rather than in the next category because its whole
+configuration surface is a TUI: `bunx ccstatusline` rewrites the file, `id` fields
+and all. A managed file would have `chezmoi apply` revert every status line change
+made the way ccstatusline expects them to be made.
 
 The symlink source file's *content* is the link target:
 

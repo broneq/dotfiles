@@ -111,7 +111,8 @@ jobs:
           set -euo pipefail
           fail() { echo "::error::$1"; exit 1; }
 
-          for link in .config/nvim .config/wezterm .config/herdr/config.toml; do
+          for link in .config/nvim .config/wezterm .config/herdr/config.toml \
+                      .config/ccstatusline/settings.json; do
             [ -L "$FAKE_HOME/$link" ] || fail "$link is not a symlink"
             [ -e "$FAKE_HOME/$link" ] || fail "$link is a symlink to nothing"
           done
@@ -147,6 +148,22 @@ jobs:
             || fail "our own value did not win the collision on .model"
           jq -e '.statusLine.command == "bunx -y ccstatusline@latest"' "$s" >/dev/null \
             || fail "our own keys were not merged in"
+
+          # Both halves of the status line have to arrive: settings.json declares
+          # the command, and the command renders whatever is in ccstatusline's own
+          # config. Versioning one without the other gave a fresh machine the
+          # default three-line layout and no way to tell why.
+          jq -e '.lines | length == 3' \
+            "$FAKE_HOME/.config/ccstatusline/settings.json" >/dev/null \
+            || fail "the ccstatusline config did not arrive through its symlink"
+
+          # Every marketplace an enabled plugin comes from must be declared, or the
+          # plugin installs only on a machine that already has the marketplace
+          # registered in its runtime state.
+          jq -e '[.enabledPlugins | to_entries[] | select(.value) | .key
+                  | split("@")[1]] - (.extraKnownMarketplaces | keys)
+                 - ["claude-plugins-official"] | length == 0' "$s" >/dev/null \
+            || fail "an enabled plugin comes from an undeclared marketplace"
 
       # A modify_ script runs on every apply and rewrites the file each time. If it
       # is not byte-stable, chezmoi reports a change forever and `chezmoi diff`
