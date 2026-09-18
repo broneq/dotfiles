@@ -527,6 +527,8 @@ the directory instead of its files would pull in 1.5 GB.
 - [~] Keep `brew shellenv` in `.zprofile` as the only PATH entry point for
       Homebrew. It probes both `/opt/homebrew` and `/usr/local`, so the file does
       not assume Apple silicon
+- [x] Source `~/.zshrc.local` last, created once by `create_dot_zshrc.local`, for
+      per-machine aliases that must never enter the repository
 - [ ] Verify with `zsh -l -c 'exit'` under a temporary `HOME` where no tools exist
 
 **Done when:** a login shell in an empty `HOME` starts with no errors.
@@ -804,3 +806,4 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-18 | `~/.claude/RTK.md` is not versioned | It is written by `rtk init --global`, which this repository runs on every apply. Same category as the hooks: a vendored copy tracks nothing and loses to the tool on the next run, and here it also made the second apply fail. Defect 19 |
 | 2026-09-18 | `30-npm-global` pins the nvm default alias to a bare major | `nvm install --lts` writes `lts/*`, which the `.zshrc` fast path cannot expand; the fallback costs 0.24 s per shell and per subshell. The script already chooses the version, so it also records it in the form the shell can read without nvm. Defect 20 |
 | 2026-09-18 | `opensuperwhisper` replaced by `openwhispr` | Both are local voice-to-text dictation apps; `openwhispr` is the one now in use, and two dictation apps bound to hotkeys on one machine is one too many. Same shape as the `beads` decision: the declaration changes, the live machine does not - `--cleanup` stays forbidden on `managed`, so `opensuperwhisper` is removed by hand with `brew uninstall --cask opensuperwhisper` |
+| 2026-09-18 | `~/.zshrc.local` for machine-local shell additions, created once via `create_` and sourced last | The two machines need aliases the other must never see, and a managed `.zshrc` reverts any hand edit on the next apply. `create_` is the chezmoi primitive for "exists, but is not mine": no diff, no revert. A three-file layout (`.zshrc` as an include-only wrapper over a repository file and a local file) was rejected: `.zshrc` is already the repository's file, so the wrapper would be a hop with no owner of its own |

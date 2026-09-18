@@ -1,0 +1,6 @@
+# Machine-local zsh configuration, sourced at the end of ~/.zshrc.
+#
+# This file belongs to this machine. The dotfiles repository created it once
+# and never rewrites it, so anything here survives every `chezmoi apply`. Do not
+# `chezmoi add` it: nothing machine-specific belongs in a repository that is
+# applied to more than one machine.

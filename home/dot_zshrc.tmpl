@@ -58,3 +58,8 @@ fi
 command -v atuin >/dev/null 2>&1 && eval "$(atuin init zsh --disable-up-arrow)"
 
 alias ccs='claude --dangerously-skip-permissions'
+
+# Machine-local additions. Sourced last so they can override anything above.
+# chezmoi creates the file once (create_ prefix) and never touches it again, so
+# per-machine aliases and paths live there without ever entering this repository.
+[ -f "$HOME/.zshrc.local" ] && . "$HOME/.zshrc.local"

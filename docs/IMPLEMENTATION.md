@@ -24,6 +24,7 @@ home/
   dot_gitconfig.tmpl          |
   dot_claude/…                |
   dot_agents/…               /
+  create_dot_zshrc.local     written once, then never touched: the machine's own zsh additions
   dot_config/symlink_*.tmpl  links pointing back into live/
   dot_config/git-identity/   the `private` profile: registry merge + its gitconfig
 live/                        real files the applications rewrite in place
@@ -295,6 +296,15 @@ uv and atuin env files are the two that previously aborted the shell outright.
 
 `$HOMEBREW_PREFIX` is used instead of a literal `/opt/homebrew` so the file does
 not assume Apple silicon. `.zprofile` probes both prefixes.
+
+`.zshrc` ends by sourcing `~/.zshrc.local`, the one place for aliases and paths
+that belong to a single machine. The source file is `create_dot_zshrc.local`:
+chezmoi's `create_` prefix writes it when it is absent and leaves it alone
+afterwards, so `chezmoi diff` never reports it and `chezmoi apply` never reverts
+it. It is sourced last on purpose, so a local line can override anything the
+repository set. A third file for the includes alone was considered and rejected:
+`.zshrc` is already owned by chezmoi, so a wrapper that only sources two other
+files would add a hop and nothing else.
 
 ## Two chezmoi flags that fail silently
 
