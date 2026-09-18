@@ -43,23 +43,25 @@ the prefix. GUI casks must target `$HOME/Applications`.
 
 ### Packages in use
 
-**Homebrew formulae (25):** `actionlint`, `beads`, `colima`, `docker`,
-`docker-buildx`, `docker-compose`, `fd`, `gh`, `git-filter-repo`, `go`,
-`graphviz`, `hey`, `htop`, `midnight-commander`, `mkcert`, `neovim`, `nvm`,
-`pandoc`, `poppler`, `python@3.14`, `ripgrep`, `rtk`, `tree`, `watch`, `whistle`
+**Homebrew formulae (23):** `actionlint`, `colima`, `docker`, `docker-buildx`,
+`docker-compose`, `fd`, `gh`, `git-filter-repo`, `go`, `graphviz`, `htop`,
+`midnight-commander`, `mkcert`, `neovim`, `nvm`, `pandoc`, `poppler`,
+`python@3.14`, `ripgrep`, `rtk`, `tree`, `watch`, `whistle`
 
 `ripgrep` and `fd` were added on 2026-09-17 as hard dependencies of the Neovim
 picker. Snacks `grep` has no search backend without `ripgrep`.
 
-The count above is the `brew leaves` set, verified to match this list exactly in
-both directions on 2026-09-17. It was previously recorded as 24 while listing 25
-entries; corrected. `brew list --formula` returns 134 entries, the full dependency
-closure, and is not what `packages.yaml` should declare.
+The count above is the `brew leaves` set of 2026-09-17, verified to match in both
+directions that day, minus `beads` and `hey`, dropped on 2026-09-18; see the
+decisions log. Both may still be installed on this machine - dropping a
+declaration does not uninstall anything, and `--cleanup` is forbidden on
+`managed`. `brew list --formula` returns the full dependency closure and is not
+what `packages.yaml` should declare.
 
 Four more formulae are **declared** in `packages.yaml` without being leaves of the
 current install: `chezmoi` (not installed at all, see the bootstrap step in phase
 0), `shellcheck` (defect 7), and `atuin` and `bun`, both of which are standalone
-installs in `$HOME` that nothing declared. Declared total: 29.
+installs in `$HOME` that nothing declared. Declared total: 27.
 
 **Homebrew casks (2):** `font-jetbrains-mono-nerd-font`, `opensuperwhisper`
 
@@ -693,3 +695,4 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-17 | The template render moved from the workflow into `scripts/check-templates.sh` | Twenty lines of bash inside YAML cannot be run by hand, which contradicts "everything mechanically checkable lives in scripts/", and cannot be planted against by a negative test. Kept separate from `check.sh` because that one has to run on a machine where chezmoi is not installed yet |
 | 2026-09-17 | The heavy install test is a separate weekly workflow, not a step in the fast one | Tens of minutes against seconds. Merging them makes the fast gate slow and the slow gate noisy. Weekly plus `workflow_dispatch` also means upstream regressions - a renamed formula, changed installer arguments - surface on their own rather than waiting for someone to remember |
 | 2026-09-17 | CI asserts each hook is present in `settings.json`, not that its installer exited 0 | Three of the five installers can succeed while installing nothing: rtk answers its own prompt with N and exits 0, and the two npm globals are simply absent from a non-interactive `PATH`, which reads identically to the legitimate herdr skip. An exit-status check would have passed on all three |
+| 2026-09-18 | `beads` and `hey` dropped from `packages.yaml` | Neither is used. `beads` is an issue tracker nothing in this toolbox invokes and `hey` an HTTP load generator with no current need. A declared package is a promise to reinstall it on every fresh machine; the cheapest time to stop making that promise is before the second machine exists. Removing the declaration does not uninstall either one - `--cleanup` stays forbidden on `managed`, so the live machine is left as it is |

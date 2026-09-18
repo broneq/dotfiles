@@ -14,7 +14,6 @@ packages:
     formulae:
       - actionlint
       - atuin           # shell history; was a standalone install in ~/.atuin
-      - beads
       - bun             # settings.json runs `bunx -y ccstatusline@latest`
       - chezmoi         # this repository's own engine; see README bootstrap
       - colima
@@ -26,7 +25,6 @@ packages:
       - git-filter-repo
       - go
       - graphviz
-      - hey
       - htop
       - midnight-commander
       - mkcert
