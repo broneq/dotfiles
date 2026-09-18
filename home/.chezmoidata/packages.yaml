@@ -49,7 +49,7 @@ packages:
       # Application bundles. On `managed` there are no admin rights, so these must
       # target ~/Applications via `cask_args appdir:` in the rendered Brewfile.
       app_bundle:
-        - opensuperwhisper
+        - openwhispr
         - wezterm
 
   # Pinned under the nvm-managed node until roadmap phase 7 moves them to mise.

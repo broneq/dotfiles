@@ -64,6 +64,7 @@ current install: `chezmoi` (not installed at all, see the bootstrap step in phas
 installs in `$HOME` that nothing declared. Declared total: 27.
 
 **Homebrew casks (2):** `font-jetbrains-mono-nerd-font`, `opensuperwhisper`
+(replaced by `openwhispr` on 2026-09-18; see the decisions log)
 
 **npm global, pinned under nvm node v24.21.0 (5):** `chrome-devtools-axi`,
 `gh-axi`, `lavish-axi`, `quota-axi`, `tasks-axi`
@@ -364,7 +365,6 @@ prior state or because it never runs apply a second time.
    `brew install herdr` beside the `curl | sh` route, and homebrew-core carries the
    formula at 0.9.1. Declared in `packages.yaml`. CI now asserts its hook alongside
    the other four instead of excusing its absence.
-
 23. **Every hook installer failed on every apply since `ccb0b38`.** The refactor
    that moved the installer list into `packages.yaml` gave `install_hook` a
    `shift` to separate the tool from its arguments, then ran `"$@"` without
@@ -374,6 +374,7 @@ prior state or because it never runs apply a second time.
    The hooks already on this machine masked it; a fresh machine would have got
    none, and only the weekly `install.yml` would have said so. Found by reading
    the scrollback of the apply that installed `openwhispr`. Fix: `"$tool" "$@"`.
+
 Four more things in that scrollback are the machine's, not the repository's, and
 are recorded here only so nobody hunts for them in the scripts: a shell with
 `/opt/homebrew/Cellar/node/24.7.0/bin` exported by hand, which broke every
@@ -802,3 +803,4 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-18 | `herdr` is a Homebrew formula, not a manual step | Upstream documents `brew install herdr` as a first-class route and homebrew-core carries it. Moving from the open question closes the only case where this repository configured a tool it did not install: the config symlink, the hook installer and the skill restore all had a binary to point at only if a human had run `curl \| sh` first. The `managed` machine's `~/.local/bin/herdr` must go by hand, because `~/.local/bin` precedes the Homebrew prefix on `PATH` |
 | 2026-09-18 | `~/.claude/RTK.md` is not versioned | It is written by `rtk init --global`, which this repository runs on every apply. Same category as the hooks: a vendored copy tracks nothing and loses to the tool on the next run, and here it also made the second apply fail. Defect 19 |
 | 2026-09-18 | `30-npm-global` pins the nvm default alias to a bare major | `nvm install --lts` writes `lts/*`, which the `.zshrc` fast path cannot expand; the fallback costs 0.24 s per shell and per subshell. The script already chooses the version, so it also records it in the form the shell can read without nvm. Defect 20 |
+| 2026-09-18 | `opensuperwhisper` replaced by `openwhispr` | Both are local voice-to-text dictation apps; `openwhispr` is the one now in use, and two dictation apps bound to hotkeys on one machine is one too many. Same shape as the `beads` decision: the declaration changes, the live machine does not - `--cleanup` stays forbidden on `managed`, so `opensuperwhisper` is removed by hand with `brew uninstall --cask opensuperwhisper` |
