@@ -283,6 +283,31 @@ a zero exit and a reassuring message.
    status, so a missing brew aborted the script instead of reaching the actionable
    message below it. Guarded in both.
 
+### Defects found by the second install run
+
+Surveyed 2026-09-18. The fix for defect 17 copied the nvm block from
+`30-npm-global` and dropped one line of it, which turned the next `install.yml`
+run red on the same step. The first defect here is the only one in this document
+that failed **loudly**, and it is the cheaper kind for exactly that reason.
+
+18. **The hooks script sourced nvm without exporting `NVM_DIR` first.** Homebrew's
+   `nvm.sh` shim opens with `[ -z "$NVM_DIR" ] && export NVM_DIR="$HOME/.nvm"`,
+   an unbound dereference under `set -u`, so the source line aborted the script
+   with `NVM_DIR: unbound variable` and `chezmoi apply` exited 1. `30-npm-global`
+   exports the variable one line above its own nvm block; the copy into
+   `60-agent-hooks` left it behind. This cannot reproduce in an interactive shell,
+   where `.zshrc` exported `NVM_DIR` long before, which is why the block looked
+   fine when it was tested by hand. Fix: the export, plus check 7 in
+   `scripts/check.sh` - any file that names `opt/nvm/nvm.sh` must export `NVM_DIR`
+   on an earlier line. Two mutations in `check-negative.sh` cover both halves, the
+   missing export and one placed too late.
+
+   Writing that check tripped the same `set -e` trap defect 17 records: the
+   `exp_line=$(grep -n …)` lookup carries grep's exit status, and a missing export
+   is precisely what the check exists to find, so the gate died instead of
+   reporting. The negative control is what surfaced it - the gate failed with the
+   wrong message rather than the right one. Guarded with `|| true`.
+
 ---
 
 ## Phase 0: Repository skeleton

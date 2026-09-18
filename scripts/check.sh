@@ -141,6 +141,37 @@ else
 	pass "no secret-shaped strings"
 fi
 
+# --- 7. NVM_DIR before nvm.sh -------------------------------------------------
+# Homebrew's nvm.sh shim opens with `[ -z "$NVM_DIR" ] && export NVM_DIR=...`,
+# which is an unbound dereference under `set -u` and kills the whole script. An
+# interactive shell never reaches it because .zshrc exported the variable long
+# before; a fresh CI runner has not, so this fails there and nowhere else. It was
+# caught that way once already, after the nvm block was copied from
+# 30-npm-global.sh into 60-agent-hooks.sh without the export.
+nvm_bad=0
+git grep -l -F 'opt/nvm/nvm.sh' -- \
+	'*.sh' '*.bash' '*.sh.tmpl' '*.bash.tmpl' \
+	':(exclude)scripts/check.sh' ':(exclude)scripts/check-negative.sh' \
+	>"$tmp/nvm" 2>/dev/null || true
+while IFS= read -r f; do
+	[ -n "$f" ] || continue
+	# First mention of the path, not the `.` line: both scripts build the path
+	# into a variable first, and the export has to precede even that.
+	# `|| true` on both: under `set -e` an assignment carries the exit status of
+	# its command substitution, and a missing export is the whole point of this
+	# check - without the guard it aborts the gate instead of reporting.
+	use_line=$(grep -nF 'opt/nvm/nvm.sh' "$f" | head -n 1 | cut -d: -f1 || true)
+	exp_line=$(grep -nE 'export[[:space:]]+NVM_DIR=' "$f" | head -n 1 | cut -d: -f1 || true)
+	[ -n "$use_line" ] || continue
+	if [ -z "$exp_line" ] || [ "$exp_line" -gt "$use_line" ]; then
+		fail "$f:$use_line: uses nvm.sh without exporting NVM_DIR first (unbound under set -u)"
+		nvm_bad=1
+	fi
+done <"$tmp/nvm"
+if [ "$nvm_bad" -eq 0 ]; then
+	pass "every nvm.sh user exports NVM_DIR first"
+fi
+
 # --- verdict ------------------------------------------------------------------
 echo
 if [ "$failures" -gt 0 ]; then

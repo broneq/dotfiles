@@ -21,6 +21,13 @@ set -euo pipefail
 # PATH unless nvm has been sourced. Without this, `command -v` finds neither and
 # both are reported as "not installed, skipping" - silently, with a zero exit. The
 # first install.yml run is what surfaced it.
+#
+# NVM_DIR is exported before the source, not after. Homebrew's nvm.sh shim opens
+# with `[ -z "$NVM_DIR" ] && export NVM_DIR=...`, which is an unbound dereference
+# under `set -u` and aborts the whole script. An interactive shell never hits it
+# because .zshrc has already exported the variable; a CI runner has not.
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+
 nvm_sh=""
 if command -v brew >/dev/null 2>&1; then
 	nvm_sh="$(brew --prefix)/opt/nvm/nvm.sh"

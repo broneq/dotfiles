@@ -298,7 +298,7 @@ other.
 passing on a clean tree is not evidence: a gate with every check accidentally
 disabled passes identically. It plants one violation at a time into a throwaway
 clone and asserts the right gate fails **with the right message** - exit 1 alone
-could come from any of the six checks. Two of its eight mutations are broken
+could come from any of the seven checks. Two of its ten mutations are broken
 templates, one that renders into invalid shell and one that does not render at all.
 
 ### What `test.yml` proves

@@ -11,7 +11,7 @@ set -euo pipefail
 # and asserts that the right gate fails with the right message.
 #
 # Asserting the message, not just the exit status, is the point. Exit 1 can come
-# from any of the six checks, so a mutation that trips the wrong one would still
+# from any of the seven checks, so a mutation that trips the wrong one would still
 # look like a pass.
 #
 # The two template mutations close phase 6's remaining criterion: "a deliberately
@@ -186,6 +186,35 @@ echo {{ .no.such.key }}
 PLANT
 expect_rejected check-templates.sh "98-broken-template.sh: render failed" \
 	"template that does not render is rejected"
+
+# --- 9. nvm.sh sourced without NVM_DIR ---------------------------------------
+# The probe is shellcheck-clean and has its prologue, so only the NVM_DIR check
+# can fire. Reproduces the original bug exactly: the export is simply absent.
+new_sandbox
+plant scripts/planted-probe.sh <<'PLANT'
+#!/usr/bin/env bash
+set -euo pipefail
+nvm_sh="$(brew --prefix)/opt/nvm/nvm.sh"
+# shellcheck disable=SC1090
+[ -s "$nvm_sh" ] && . "$nvm_sh"
+PLANT
+expect_rejected check.sh "without exporting NVM_DIR first" \
+	"nvm.sh used without NVM_DIR is rejected"
+
+# --- 10. NVM_DIR exported, but after the fact --------------------------------
+# The ordering half of the same rule: an export below the source line is no use,
+# because the script is already dead by then.
+new_sandbox
+plant scripts/planted-probe.sh <<'PLANT'
+#!/usr/bin/env bash
+set -euo pipefail
+nvm_sh="$(brew --prefix)/opt/nvm/nvm.sh"
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+# shellcheck disable=SC1090
+[ -s "$nvm_sh" ] && . "$nvm_sh"
+PLANT
+expect_rejected check.sh "without exporting NVM_DIR first" \
+	"NVM_DIR exported after the nvm.sh line is rejected"
 
 # --- verdict ------------------------------------------------------------------
 echo
