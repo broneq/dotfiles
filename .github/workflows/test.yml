@@ -321,9 +321,23 @@ jobs:
           env HOME="$fake" chezmoi init --source . \
             --promptChoice "Machine profile=managed" --no-tty
           env HOME="$fake" chezmoi execute-template \
-            <home/.chezmoiscripts/run_onchange_after_50-claude-skills.sh.tmpl >"$fake/restore.sh"
+            <home/.chezmoiscripts/run_after_50-claude-skills.sh.tmpl >"$fake/restore.sh"
           env HOME="$fake" bash "$fake/restore.sh"
           echo "FAKE_HOME=$fake" >>"$GITHUB_ENV"
+
+      # The script runs on every apply, so a converged machine must cost it no
+      # fetch, and a machine whose ~/.claude was wiped must get its symlinks back
+      # without one either. Both are the same run: a fetch prints `skill <name>`,
+      # so any such line on the second pass means the marker did not hold.
+      - name: Assert the second run repairs the symlinks and fetches nothing
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          rm -rf "$FAKE_HOME/.claude/skills"
+          out="$(env HOME="$FAKE_HOME" bash "$FAKE_HOME/restore.sh")"
+          ! grep -q '^skill ' <<<"$out" || fail "second run fetched a skill again: $out"
+          count="$(find "$FAKE_HOME/.claude/skills" -mindepth 1 -maxdepth 1 -type l | wc -l | tr -d ' ')"
+          [ "$count" -eq 13 ] || fail "expected 13 symlinks after the second run, found $count"
 
       - name: Assert the skills landed under the names they have today
         run: |

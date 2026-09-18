@@ -9,9 +9,15 @@ set -euo pipefail
 # agent-side skill, not by a package manager, so restore has to be ours.
 #
 # The skill list is expanded into this script at template time, which means no jq
-# at runtime, no dependency on the lock file having reached the destination yet,
-# and a script whose own text changes when the lock file does - which is what
-# re-triggers run_onchange.
+# at runtime and no dependency on the lock file having reached the destination yet.
+#
+# Plain run_after_, not run_onchange_: the trigger for a re-run is not "the lock
+# file changed" but "a skill is not on disk in the version the lock file names",
+# and only the destination knows that. run_onchange_ keys on the script text, so
+# after `rm -rf ~/.claude` it saw nothing to do and thirteen skills stayed gone
+# (defect 24). Every apply now checks each skill against the marker written next
+# to its SKILL.md, and fetches only what is missing or out of date, so a converged
+# machine costs thirteen file reads and no network.
 #
 # Two skills in ~/.agents/skills have no lock entry (create-tasks-workspace,
 # no-mistakes) and are not restored here. See README.
@@ -45,7 +51,7 @@ clone_once() {
 }
 
 install_skill() {
-	local url skill_path folder checkout src
+	local url skill_path folder hash checkout src marker
 	url="$1"
 	skill_path="$2"
 	# The installed directory name is the slug of the lock file key, expanded at
@@ -53,6 +59,17 @@ install_skill() {
 	# "Writing Hookify Rules" lives at plugins/hookify/skills/writing-rules/, and a
 	# restore keyed on the path silently renames the skill to `writing-rules`.
 	folder="$3"
+	# The lock file's skillFolderHash, recorded beside the copy. The copy is current
+	# when the marker matches; the symlink is re-pointed either way, because
+	# ~/.claude/skills can vanish on its own while ~/.agents/skills survives.
+	hash="$4"
+	marker="$agents_dir/$folder/.skill-lock-hash"
+
+	if [ -f "$agents_dir/$folder/SKILL.md" ] \
+		&& [ "$(cat "$marker" 2>/dev/null)" = "$hash" ]; then
+		ln -sfn "../../.agents/skills/$folder" "$claude_dir/$folder"
+		return 0
+	fi
 
 	if ! checkout="$(clone_once "$url")"; then
 		printf 'skill %s: clone of %s failed\n' "$folder" "$url" >&2
@@ -69,13 +86,14 @@ install_skill() {
 
 	rm -rf "${agents_dir:?}/$folder"
 	cp -R "$src" "$agents_dir/$folder"
+	printf '%s' "$hash" >"$marker"
 	ln -sfn "../../.agents/skills/$folder" "$claude_dir/$folder"
 	printf 'skill %s\n' "$folder"
 }
 
 {{ $lock := include "dot_agents/dot_skill-lock.json" | fromJson -}}
 {{ range $name, $skill := $lock.skills -}}
-install_skill "{{ $skill.sourceUrl }}" "{{ $skill.skillPath }}" "{{ $name | lower | replace " " "-" }}"
+install_skill "{{ $skill.sourceUrl }}" "{{ $skill.skillPath }}" "{{ $name | lower | replace " " "-" }}" "{{ $skill.skillFolderHash }}"
 {{ end }}
 # settings.json registers a plugin marketplace at a local directory. Without the
 # clone, every bdk plugin fails to load, with an error that does not name this as

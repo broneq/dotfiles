@@ -9,17 +9,14 @@ last.
 
 Status legend: `[ ]` not started, `[~]` in progress, `[x]` done.
 
-`[~]` is the honest state for most of what was written on 2026-09-17. Corrected
-three times the same day. The file layer is genuinely fresh-machine tested: it is
-applied on `macos-latest` on every push and is green. The install scripts have now
-run too, once, in `install.yml` - six of its seven steps passed and the seventh
-found two defects. Nothing has yet been applied to a real machine. `chezmoi` was installed on the `managed` machine and `chezmoi init`
-plus `chezmoi apply --exclude=scripts` were run into temporary directories under
-both profiles, which is what found the defects listed under "Defects found by the
-first execution". **No install script has ever run**: no `brew bundle`, no npm
-globals, no uv tools, no skill clone, no hook installer. The real machine has had
-nothing applied to it. Verification still happens on a dedicated test account, and
-the boxes stay `[~]` until each "Done when" has actually been observed there.
+Phases 0 through 6 were authored on 2026-09-17 without executing anything and
+carried `[~]` until each "Done when" had been observed on a real machine. As of
+2026-09-18 both machines have run `chezmoi init` and `chezmoi apply` against their
+real `$HOME`, every install script has executed on both, and the boxes below
+reflect what was observed there: on the `owned` machine directly, on `managed` by
+the owner's report that the apply completed and the result is in daily use. The
+first real applies found defects 19 through 25, all fixed the same day. What stays
+open is listed as `[ ]` with the reason beside it; phase 7 has not started.
 
 ---
 
@@ -375,6 +372,24 @@ prior state or because it never runs apply a second time.
    none, and only the weekly `install.yml` would have said so. Found by reading
    the scrollback of the apply that installed `openwhispr`. Fix: `"$tool" "$@"`.
 
+24. **`~/.claude/skills` was empty on a machine where the restore had run.**
+   The owner removed `~/.claude` while chasing defect 19 and re-applied. The
+   apply recreated every managed file, and `run_onchange_after_50-claude-skills`
+   did nothing, because its text had not changed - `run_onchange_` keys on the
+   script, not on the destination. `~/.agents/skills` survived the wipe, the
+   thirteen symlinks did not, and Claude Code loaded none of the thirteen skills
+   for the rest of the day. Found by counting the symlinks while ticking phase 5.
+   Fix: the script is plain `run_after_` and decides per skill whether to fetch,
+   by comparing the lock entry's `skillFolderHash` against a marker it writes
+   beside each `SKILL.md`. A converged machine costs thirteen file reads, a wiped
+   `~/.claude` costs thirteen `ln -sfn`, and CI now runs the script twice.
+25. **`~/.claude/settings.json` was in `chezmoi diff` after every session.** The
+   merge piped through `jq`, which ends its output with a newline; Claude Code
+   writes the file without one. One byte, rewritten by chezmoi on every apply and
+   undone by Claude Code on its next write, so "`chezmoi diff` is empty" was
+   never true on a machine that had run Claude Code since the last apply. Fix:
+   `jq -j`.
+
 Four more things in that scrollback are the machine's, not the repository's, and
 are recorded here only so nobody hunts for them in the scripts: a shell with
 `/opt/homebrew/Cellar/node/24.7.0/bin` exported by hand, which broke every
@@ -390,29 +405,29 @@ dropped `beads`; and two user-level MCP servers in `~/.claude.json` (`serena`,
 
 **Goal:** an empty but valid chezmoi source tree, with the profile prompt working.
 
-- [ ] **Bootstrap step, manual and one-off:** `brew install chezmoi`. The engine
+- [x] **Bootstrap step, manual and one-off:** `brew install chezmoi`. The engine
       cannot install itself from inside its own run. Added after the 2026-09-17
-      survey found `chezmoi` neither installed nor declared anywhere
+      survey found `chezmoi` neither installed nor declared anywhere. Done on
+      both machines, 2026-09-18
 - [x] `git init`, add `.gitignore` covering `live/**/*.log`, `live/**/*.sock`, `.DS_Store`
-- [~] Create `.chezmoiroot` containing `home`
-- [~] Create `home/.chezmoi.toml.tmpl` with `promptChoiceOnce` over
+- [x] Create `.chezmoiroot` containing `home`
+- [x] Create `home/.chezmoi.toml.tmpl` with `promptChoiceOnce` over
       `managed` / `owned`, stored as `.profile`. The prompt text is `Machine
       profile` and must stay short and free of `,` and `=`: it doubles as the
       lookup key for `--promptChoice`, which is how CI answers it (defect 11)
-- [~] Have the same template record `sourceDir`. `chezmoi init --source` does not
+- [x] Have the same template record `sourceDir`. `chezmoi init --source` does not
       persist it, and without it a later bare `chezmoi apply` applies nothing
       (defect 12)
-- [~] Add a profile-vs-reality assertion: if `.profile` is `owned`, require admin
+- [x] Add a profile-vs-reality assertion: if `.profile` is `owned`, require admin
       group membership; abort otherwise. Lives in
       `run_once_before_00-assert-profile.sh.tmpl`, not in `.chezmoi.toml.tmpl`:
       the config template is evaluated once at `init`, the assertion must run on
       every apply
-- [ ] Run `chezmoi init --source ~/projects/dotfiles` on a real machine and confirm
-      the prompt fires exactly once. Partially done 2026-09-17: verified
-      non-interactively into a throwaway destination under both profiles, with the
-      generated config carrying both the answer and `sourceDir`, and a bare
-      `chezmoi apply` afterwards finding the source tree. Never run against a real
-      `$HOME`
+- [x] Run `chezmoi init --source ~/projects/dotfiles` on a real machine and confirm
+      the prompt fires exactly once. Done on both machines, 2026-09-18. `chezmoi
+      data` reports the chosen profile and `sourceDir` on the `owned` machine, and
+      a bare `chezmoi apply` there is a no-op apart from the two plain `run_`
+      scripts
 - [x] `scripts/check.sh`: mechanical guardrails replacing the rules that used to
       sit in `CLAUDE.md` as prose. Verified 2026-09-17 in both directions - clean
       tree exits 0, and a planted script containing `sudo`, `brew bundle
@@ -428,28 +443,30 @@ no-op.
 
 **Goal:** every installed tool is declared in one file, and re-installable.
 
-- [~] Create `home/.chezmoidata/packages.yaml` with the four channels. The profile
+- [x] Create `home/.chezmoidata/packages.yaml` with the four channels. The profile
       split turned out to apply to casks only - see the decisions log
-- [~] Split casks into `user_level` (fonts, installs to `~/Library`) and
+- [x] Split casks into `user_level` (fonts, installs to `~/Library`) and
       `app_bundle` (needs an appdir override on `managed`)
-- [~] `run_onchange_10-brew.sh.tmpl`: render a Brewfile from YAML, run
+- [x] `run_onchange_10-brew.sh.tmpl`: render a Brewfile from YAML, run
       `brew bundle install`. **No `--cleanup`, no `--force`.** Corrected: `brew
       bundle` has no `--appdir` flag. The mechanism is `cask_args appdir:` written
       into the Brewfile, emitted only when the profile is `managed`
-- [~] `run_onchange_30-npm-global.sh.tmpl`: install the five `*-axi` packages
-- [~] `run_onchange_40-uv-tools.sh.tmpl`: bootstrap `uv` if absent, then
+- [x] `run_onchange_30-npm-global.sh.tmpl`: install the five `*-axi` packages
+- [x] `run_onchange_40-uv-tools.sh.tmpl`: bootstrap `uv` if absent, then
       `uv tool install` each entry
-- [~] Add WezTerm as a cask
-- [ ] Drop the manual `~/Applications/WezTerm.app` install. Manual and one-off:
+- [x] Add WezTerm as a cask
+- [x] Drop the manual `~/Applications/WezTerm.app` install. Manual and one-off:
       `brew install --cask` refuses to write over an app bundle it has no receipt
       for, and `--force` is banned repository-wide. Move the existing bundle to the
-      trash once, then apply. Recorded in `README.md`
-- [~] Declare `shellcheck` explicitly (defect 7)
-- [~] Declare `chezmoi`, `atuin` and `bun` explicitly. Same class of defect as 7:
+      trash once, then apply. Recorded in `README.md`. The cask is installed on
+      both machines as of 2026-09-18
+- [x] Declare `shellcheck` explicitly (defect 7)
+- [x] Declare `chezmoi`, `atuin` and `bun` explicitly. Same class of defect as 7:
       installed, depended upon, declared nowhere. `bun` is a hard dependency of the
       `settings.json` status line
 
 **Done when:** a second `chezmoi apply` produces no changes and installs nothing.
+Observed on both machines, 2026-09-18.
 
 **Risk:** low. Nothing is removed. Worst case a package is already present and
 `brew bundle` reports it as satisfied.
@@ -461,27 +478,27 @@ no-op.
 **Goal:** all authored config lives in the repo, and application-written files
 stay editable in place.
 
-- [~] Create `live/` and copy the real files there: `nvim/`, `wezterm/`,
+- [x] Create `live/` and copy the real files there: `nvim/`, `wezterm/`,
       `herdr/config.toml`, `ccstatusline/settings.json`. The last was added
       2026-09-18: `settings.json` declared the status line *command* and nothing
       declared what that command renders, so a fresh machine got ccstatusline's
       default layout
-- [~] Add `symlink_*.tmpl` entries pointing at `{{ .chezmoi.sourceDir }}/../live/...`
-- [~] Add managed files: `~/.claude/CLAUDE.md`. Corrected 2026-09-18: `RTK.md`
+- [x] Add `symlink_*.tmpl` entries pointing at `{{ .chezmoi.sourceDir }}/../live/...`
+- [x] Add managed files: `~/.claude/CLAUDE.md`. Corrected 2026-09-18: `RTK.md`
       was listed here and versioned, but `rtk init --global` writes it; the copy
       in git was rtk's own text from an older release. Dropped, see defect 19
-- [~] Handle `~/.claude/settings.json` with a `modify_` merge script rather than a
+- [x] Handle `~/.claude/settings.json` with a `modify_` merge script rather than a
       copy. Corrected 2026-09-17: the file has three authors, so copying it
       versioned somebody else's output. 13 of its 15 top-level keys are ours;
       `hooks` belongs to five installed tools and `autoMode` to Claude Code.
       Only one templated path remains, the `bdk` marketplace
-- [~] Install agent hooks through each tool's own installer
+- [x] Install agent hooks through each tool's own installer
       (`run_after_60-agent-hooks.sh.tmpl`) instead of versioning a copy of herdr's
       script. Plain `run_`, not `run_onchange_`: see defect 14. All five install
       commands were checked against the tools' own `--help` on 2026-09-17
-- [~] Write the first WezTerm config in `live/wezterm/wezterm.lua`: JetBrains Mono
+- [x] Write the first WezTerm config in `live/wezterm/wezterm.lua`: JetBrains Mono
       Nerd Font, theme, sensible keybindings
-- [~] Delete `~/.claude/statusline-command.sh` - declaratively, via
+- [x] Delete `~/.claude/statusline-command.sh` - declaratively, via
       `home/.chezmoiremove`. A one-shot `rm` in a `run_once_` script would silently
       do nothing on a machine that had already run it
 - [ ] Delete `~/.config/nvim/init.lua.bak` once the new layout has been used for a
@@ -492,12 +509,13 @@ stay editable in place.
 Move the whole of `~/.config/nvim` (7 files) into `live/nvim/` and symlink it.
 Plugin payloads live in `~/.local/share/nvim/lazy/`, so nothing large follows.
 
-- [~] Commit `lazy-lock.json` together with the config. It pins every plugin to a
+- [x] Commit `lazy-lock.json` together with the config. It pins every plugin to a
       commit and is what makes a fresh machine reproduce this exact setup
 - [x] Confirm `ripgrep` and `fd` are in `packages.yaml` before this phase lands.
       Without them the snacks picker is installed but non-functional, which is a
       worse state than not having it
-- [ ] Verify headlessly after apply, not by opening the editor and looking:
+- [x] Verify headlessly after apply, not by opening the editor and looking.
+      Passed on the `owned` machine, 2026-09-18:
 
 ```sh
 nvim --headless -c 'lua
@@ -509,7 +527,8 @@ nvim --headless -c 'lua
 
 **Done when:** `chezmoi diff` is empty, `~/.config/nvim` is a symlink into the
 repo, the headless assertion above passes, and editing `live/wezterm/wezterm.lua`
-changes the running terminal without running `chezmoi apply`.
+changes the running terminal without running `chezmoi apply`. All four observed
+on the `owned` machine, 2026-09-18; the first only after defect 25.
 
 **Risk:** low, but verify the `~/.claude` whitelist by hand. Accidentally adding
 the directory instead of its files would pull in 1.5 GB.
@@ -520,18 +539,21 @@ the directory instead of its files would pull in 1.5 GB.
 
 **Goal:** `~/.zshrc` that works on a machine where nothing is installed yet.
 
-- [~] Port `.zshrc` to a template, fixing defects 1 through 4 from "Current state"
-- [~] Port `.zprofile` to a template as well - it carries the third hardcoded home
+- [x] Port `.zshrc` to a template, fixing defects 1 through 4 from "Current state"
+- [x] Port `.zprofile` to a template as well - it carries the third hardcoded home
       path (defect 3, corrected)
-- [~] Guard every `source` with an existence test. Two were unguarded, not one
-- [~] Keep `brew shellenv` in `.zprofile` as the only PATH entry point for
+- [x] Guard every `source` with an existence test. Two were unguarded, not one
+- [x] Keep `brew shellenv` in `.zprofile` as the only PATH entry point for
       Homebrew. It probes both `/opt/homebrew` and `/usr/local`, so the file does
       not assume Apple silicon
 - [x] Source `~/.zshrc.local` last, created once by `create_dot_zshrc.local`, for
       per-machine aliases that must never enter the repository
-- [ ] Verify with `zsh -l -c 'exit'` under a temporary `HOME` where no tools exist
+- [x] Verify with `zsh -l -c 'exit'` under a temporary `HOME` where no tools exist.
+      Exit 0 with the rendered `.zshrc` and `.zprofile` under a fresh `HOME` and
+      `PATH=/usr/bin:/bin`, 2026-09-18
 
-**Done when:** a login shell in an empty `HOME` starts with no errors.
+**Done when:** a login shell in an empty `HOME` starts with no errors. Observed
+2026-09-18.
 
 ---
 
@@ -539,23 +561,27 @@ the directory instead of its files would pull in 1.5 GB.
 
 **Goal:** one repo, correct identity and package set on both machines.
 
-- [~] Add `~/.gitconfig` as a template; email switches on `.profile`
-- [~] Move both addresses into `.chezmoidata/identity.yaml`, so the machine
+- [x] Add `~/.gitconfig` as a template; email switches on `.profile`
+- [x] Move both addresses into `.chezmoidata/identity.yaml`, so the machine
       default and the `private` profile override cannot drift apart
-- [ ] Confirm the profile-driven split renders correctly for both values
-      (`chezmoi execute-template` against each)
-- [~] Document in `README.md` how to bootstrap the second machine, and every step
+- [x] Confirm the profile-driven split renders correctly for both values
+      (`chezmoi execute-template` against each). CI renders both and asserts the
+      addresses differ; both machines commit under the right one
+- [x] Document in `README.md` how to bootstrap the second machine, and every step
       that stays manual
-- [~] Version the `git-identity` layer: the `private` profile registry as a
+- [x] Version the `git-identity` layer: the `private` profile registry as a
       `modify_` merge, its gitconfig as a template, the plugin as an
       `enabledPlugins` entry. `~/.config/gh-private` stays out; see the decisions
       log
 - [ ] Confirm on the second machine that `/git-identity:use private` binds a
       project and `git config user.email` follows, after the manual `gh auth login`
-      documented in `README.md`
+      documented in `README.md`. Still open 2026-09-18: `~/.config/gh-private`
+      does not exist on the `owned` machine, so the login step has not been done
+      there yet
 
 **Done when:** `chezmoi execute-template` with `profile=managed` produces a
 Brewfile containing `cask_args appdir:`, and with `profile=owned` does not.
+Asserted by CI on every push; observed on both real machines 2026-09-18.
 
 Corrected 2026-09-17: the original criterion named "admin-only casks", but there
 are none. The container formulae were the only profile-split candidate and they are
@@ -568,36 +594,42 @@ in both directions.
 
 **Goal:** plugins and skills reproducible on a fresh machine.
 
-- [~] Version `~/.agents/.skill-lock.json`
-- [~] Write `run_onchange_after_50-claude-skills.sh.tmpl`: for each entry in the
-      lock file, clone `sourceUrl` once per repository and copy `skillPath`'s
-      folder into `~/.agents/skills/<folder>`, then symlink into `~/.claude/skills`.
-      The folder name is the slugified lock file key, expanded at template time
+- [x] Version `~/.agents/.skill-lock.json`
+- [x] Write `run_after_50-claude-skills.sh.tmpl`: for each entry in the lock
+      file, clone `sourceUrl` once per repository and copy `skillPath`'s folder
+      into `~/.agents/skills/<folder>`, then symlink into `~/.claude/skills`. The
+      folder name is the slugified lock file key, expanded at template time
       (defects 9 and 13). The list is expanded at template time with
-      `include … | fromJson`, which removes a runtime `jq` dependency and makes
-      `run_onchange` fire on any lock file change
-- [~] Make the `bdk` cross-repo dependency explicit: clone
+      `include … | fromJson`, which removes a runtime `jq` dependency. Was
+      `run_onchange_` until defect 24; now plain `run_`, with a per-skill marker
+      deciding what to fetch
+- [x] Make the `bdk` cross-repo dependency explicit: clone
       `<home>/projects/bdk` if missing, over **HTTPS**, or fail with a clear
       message. The repository is public, and an SSH remote made a GitHub key an
       undeclared prerequisite of `chezmoi apply` - which matters doubly because
       this script's failure aborts the apply before the hooks script runs
-- [ ] Confirm plugins restore from `settings.json` alone
+- [x] Confirm plugins restore from `settings.json` alone
       (`enabledPlugins` + `extraKnownMarketplaces`), with no need to reproduce
       `installed_plugins.json` or the plugin cache. Established 2026-09-18 from
       Claude Code 2.1.275 itself, which carries the strings
       `Syncing installed_plugins.json with enabledPlugins from all settings.json
       files`, `Failed to roll back enabledPlugins after install failure for` and a
       `plugin prune` that removes *auto-installed* plugins - so declaring is
-      installing. Still unchecked because that is evidence about the binary, not a
-      fresh-machine run, which is what this box asks for. CI now asserts the
-      weaker invariant that no enabled plugin comes from an undeclared marketplace
+      installing. Then observed the same day: the `owned` machine's `~/.claude`
+      was created by `chezmoi apply` at 13:42 with nothing but the merged
+      `settings.json`, `CLAUDE.md` and the hooks, and the next Claude Code
+      session had `bdk`, `caveman` and `git-identity` loaded. Claude Code 2.1.277
+      keeps them under `~/.claude/plugins/synced/`, and its
+      `installed_plugins.json` stays `{}` - another reason never to version it.
+      CI also asserts that no enabled plugin comes from an undeclared marketplace
 
 **Done when:** deleting `~/.agents/skills` and running `chezmoi apply` restores
-**13** skills, under the names they have today. Verified 2026-09-17 by rendering
-only: all thirteen `sourceUrl` + `skillPath` pairs resolve upstream (checked
-through the GitHub contents API) and the thirteen rendered folder names match the
-directories on disk exactly. The script itself has still never been executed. Corrected 2026-09-17 from 15: see defect 8. The remaining two have
-no source to restore from and are documented as manual in `README.md`.
+**13** skills, under the names they have today. Observed on the `owned` machine
+2026-09-18, which had no `~/.agents/skills` before: thirteen directories with
+`SKILL.md`, thirteen resolving symlinks, and the thirteen skills listed by the
+next Claude Code session. Corrected 2026-09-17 from 15: see defect 8. The
+remaining two have no source to restore from and are documented as manual in
+`README.md`.
 
 **Note:** there is no `skills` CLI on this machine. The lock file is written by an
 agent-side skill, not a package manager, so restore must be our own script. This
@@ -674,13 +706,15 @@ criterion.
 - [x] First run, 2026-09-17. Six of seven steps green on both profiles, which is
       the first evidence that the install path works at all. The hooks step found
       defects 16 and 17
-- [ ] Green `install.yml` after the fixes for defects 16 and 17
+- [x] Green `install.yml` after the fixes for defects 16 and 17. Green on
+      `8d2409c`, 2026-09-18, on both profiles. That run predates defect 23 and
+      its fix; the weekly run covers it, and `test.yml` is green on every push
+      since
 
 **Done when:** CI is green on GitHub and a deliberately broken template turns it
-red. Corrected twice on 2026-09-17: `main` is pushed, the fast workflow is green on
-`macos-latest`, and the negative half is covered by `check-negative.sh` rather than
-by nothing. The phase stays open on one item: `install.yml` has run once and found
-two real defects, so it has yet to be green.
+red. Corrected twice on 2026-09-17 and closed 2026-09-18: `main` is pushed, both
+workflows are green on `macos-latest`, and the negative half is covered by
+`check-negative.sh`.
 
 ---
 
@@ -807,3 +841,6 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-18 | `30-npm-global` pins the nvm default alias to a bare major | `nvm install --lts` writes `lts/*`, which the `.zshrc` fast path cannot expand; the fallback costs 0.24 s per shell and per subshell. The script already chooses the version, so it also records it in the form the shell can read without nvm. Defect 20 |
 | 2026-09-18 | `opensuperwhisper` replaced by `openwhispr` | Both are local voice-to-text dictation apps; `openwhispr` is the one now in use, and two dictation apps bound to hotkeys on one machine is one too many. Same shape as the `beads` decision: the declaration changes, the live machine does not - `--cleanup` stays forbidden on `managed`, so `opensuperwhisper` is removed by hand with `brew uninstall --cask opensuperwhisper` |
 | 2026-09-18 | `~/.zshrc.local` for machine-local shell additions, created once via `create_` and sourced last | The two machines need aliases the other must never see, and a managed `.zshrc` reverts any hand edit on the next apply. `create_` is the chezmoi primitive for "exists, but is not mine": no diff, no revert. A three-file layout (`.zshrc` as an include-only wrapper over a repository file and a local file) was rejected: `.zshrc` is already the repository's file, so the wrapper would be a hop with no owner of its own |
+| 2026-09-18 | `50-claude-skills` is plain `run_after_`, with a marker beside each `SKILL.md` deciding what to fetch | `run_onchange_` keys on the script text and knows nothing about the destination: after `rm -rf ~/.claude` it saw nothing to do and thirteen skills stayed unloaded (defect 24). The destination is the only thing that knows whether a skill is present in the version the lock names, so the script asks it on every apply. Same shape as `60-agent-hooks`: an idempotent script that runs every time and does nothing when converged, at the cost of thirteen file reads |
+| 2026-09-18 | `settings.json` merge emits no trailing newline (`jq -j`) | Claude Code writes the file without one. Matching its byte layout is what makes `chezmoi diff` empty after a session, which is phase 2's criterion; the alternative was a one-byte rewrite on every apply and every session, for ever (defect 25) |
+| 2026-09-18 | Phases 0 through 6 closed on real applies, not on the test account | The plan said verification would happen on a dedicated test account. Both real machines have now been applied to, CI runs the same scripts on a clean runner weekly, and a third environment would add a machine to maintain without adding evidence the runner does not already give |

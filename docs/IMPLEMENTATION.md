@@ -240,7 +240,7 @@ Three entries are there for reasons that are not obvious from the list:
 | `run_onchange_10-brew.sh.tmpl` | Renders a Brewfile into a heredoc and runs `brew bundle install`. `brew bundle` has **no** `--appdir` flag - `cask_args appdir:` inside the Brewfile is the mechanism. Never `--cleanup`, never `--force`. |
 | `run_onchange_30-npm-global.sh.tmpl` | Sources nvm explicitly. Installing under whichever node is first on PATH would scatter the five tools across the two or three node installations this machine has. |
 | `run_onchange_40-uv-tools.sh.tmpl` | Bootstraps `uv` if absent. The `curl \| sh` in the guarded branch is the only downloaded script in the repository. |
-| `run_onchange_after_50-claude-skills.sh.tmpl` | See below. |
+| `run_after_50-claude-skills.sh.tmpl` | See below. Plain `run_`; the marker beside each `SKILL.md` decides what is fetched. |
 | `run_after_60-agent-hooks.sh.tmpl` | Calls each tool's own hook installer. Plain `run_`, not `run_onchange_`; see "Hooks belong to their tools". |
 
 `run_onchange_` re-runs when the script's own text changes. Because the package
@@ -249,6 +249,11 @@ and re-triggers the run. Nothing hashes anything explicitly.
 
 The corollary is the trap: a `run_onchange_` script whose text depends on no data
 runs once and never again. `60-agent-hooks` is that case and is plain `run_`.
+
+The other trap is the mirror image: `run_onchange_` keys on the script text and
+knows nothing about the destination. `50-claude-skills` used to be `run_onchange_`,
+and after `rm -rf ~/.claude` it did not run again, because its text had not
+changed. It is plain `run_` now, and decides per skill whether to fetch.
 
 ## Skill restore
 
@@ -268,8 +273,14 @@ of the script:
    for the duration of the run.
 3. **The list is expanded at template time,** via `include … | fromJson`. That
    removes a runtime `jq` dependency and removes the ordering question of whether
-   the lock file has been written to the destination yet. It also means the script
-   text changes when the lock file changes, which is what makes `run_onchange` fire.
+   the lock file has been written to the destination yet.
+4. **Each copy carries a marker.** `~/.agents/skills/<folder>/.skill-lock-hash`
+   holds the lock entry's `skillFolderHash`. On every apply the script compares
+   the marker against the lock: a match costs one file read and re-points the
+   `~/.claude/skills` symlink, anything else fetches. That is what lets it be
+   plain `run_after_` rather than `run_onchange_`: a wiped `~/.claude` or
+   `~/.agents/skills` is repaired on the next apply, and a lock file bump is
+   fetched, without either case depending on the script text having changed.
 
 The script is `after_` so it runs once the file tree is in place. It also clones
 `~/projects/bdk` if missing: `settings.json` registers a plugin marketplace at that

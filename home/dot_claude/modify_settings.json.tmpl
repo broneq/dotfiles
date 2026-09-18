@@ -41,7 +41,11 @@ fi
 # Code auto-installs by itself. A plugin listed `false` is not declared at all -
 # one that was never installed is already disabled, so the entry would only be a
 # comment. Those decisions live in docs/ROADMAP.md instead.
-printf '%s' "$current" | jq --sort-keys '. * {
+#
+# `-j` drops the trailing newline. Claude Code writes the file without one, so a
+# merge that adds it back shows up in `chezmoi diff` after every session and gets
+# rewritten on every apply, for a change of one byte that the next write undoes.
+printf '%s' "$current" | jq -j --sort-keys '. * {
   "model": "opus",
   "tui": "fullscreen",
   "cleanupPeriodDays": 730,
