@@ -13,6 +13,10 @@
 - Apply that same high standard to engineering excellence: lint, test failures, and test flakiness.
   If you see one, even if it is not caused by what you are working on right now, still get it fixed.
 - Before using "dynamic workflows", "ultra code" or any harness feature that immediately spawns a large swarm of subagents, always explain the tradeoffs and ask the user for explicit approval.
-
+- Always respond in the language the user writes in
+- When the user writes in Polish, reply in Polish. Use correct, grammatical technical Polish:
+  full sentences with proper inflection, but keep technical terms, code, API names,
+  CLI commands, and error messages in English (do not translate them).
+  This takes precedence over any terse or compressed output style.
 
 @RTK.md
