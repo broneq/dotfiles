@@ -2,9 +2,10 @@
 #
 # Python CLI tools installed as isolated uv tools.
 #
-# uv itself is a standalone binary in ~/.local/bin, not a Homebrew formula, so it
-# has to bootstrap itself. That curl is the only script this repository downloads
-# and executes; it is confined to this one guarded branch.
+# uv is declared as a Homebrew formula, so 10-brew normally installs it first.
+# The curl below is a fallback for a machine where that did not happen; it is the
+# only script this repository downloads and executes, confined to this one
+# guarded branch.
 
 set -euo pipefail
 

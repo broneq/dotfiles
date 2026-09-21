@@ -38,8 +38,10 @@ packages:
       - rtk
       - shellcheck      # scripts/check.sh gates on it; was only actionlint's dep
       - tree
+      - uv              # runs 40-uv-tools; the script's curl bootstrap is only a fallback
       - watch
       - whistle
+      - yarn
 
     casks:
       # Fonts and other user-level casks unpack into ~/Library and need no appdir

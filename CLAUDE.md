@@ -161,7 +161,7 @@ into one; each owns a distinct class of tool.
 | Homebrew | CLI tools, GUI casks | `Brewfile` generated from `packages.yaml` |
 | mise | language runtimes (node, python, go, bun) | replaces nvm |
 | npm global | `*-axi` CLI tools | migration to mise is roadmap phase 7 |
-| uv tools | `code-review-graph` | `uv` itself is a standalone binary |
+| uv tools | `code-review-graph` | `uv` itself is a Homebrew formula; the script bootstraps it only when brew did not |
 
 Project-scoped dependencies belong to the project, never here.
 

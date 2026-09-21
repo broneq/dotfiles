@@ -239,7 +239,7 @@ Three entries are there for reasons that are not obvious from the list:
 |---|---|
 | `run_onchange_10-brew.sh.tmpl` | Renders a Brewfile into a heredoc and runs `brew bundle install`. `brew bundle` has **no** `--appdir` flag - `cask_args appdir:` inside the Brewfile is the mechanism. Never `--cleanup`, never `--force`. |
 | `run_onchange_30-npm-global.sh.tmpl` | Sources nvm explicitly. Installing under whichever node is first on PATH would scatter the five tools across the two or three node installations this machine has. |
-| `run_onchange_40-uv-tools.sh.tmpl` | Bootstraps `uv` if absent. The `curl \| sh` in the guarded branch is the only downloaded script in the repository. |
+| `run_onchange_40-uv-tools.sh.tmpl` | Bootstraps `uv` if absent; normally `10-brew` has already installed it, since `uv` is a declared formula. The `curl \| sh` in the guarded branch is the only downloaded script in the repository. |
 | `run_after_50-claude-skills.sh.tmpl` | See below. Plain `run_`; the marker beside each `SKILL.md` decides what is fetched. |
 | `run_after_60-agent-hooks.sh.tmpl` | Calls each tool's own hook installer. Plain `run_`, not `run_onchange_`; see "Hooks belong to their tools". |
 
