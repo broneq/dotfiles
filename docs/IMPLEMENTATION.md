@@ -27,6 +27,7 @@ home/
   create_dot_zshrc.local     written once, then never touched: the machine's own zsh additions
   dot_config/symlink_*.tmpl  links pointing back into live/
   dot_config/git-identity/   the `private` profile: registry merge + its gitconfig
+  dot_serena/                Serena's user config: merge of the keys this repo owns
 live/                        real files the applications rewrite in place
 scripts/check.sh             mechanical guardrails; needs nothing installed
 scripts/check-templates.sh   renders every template under both profiles, shellchecks it
@@ -64,8 +65,8 @@ home/dot_config/symlink_nvim.tmpl   ->  {{ .chezmoi.sourceDir }}/../live/nvim
 **chezmoi-managed file or template** when only a human writes it: `.zshrc`,
 `.zprofile`, `.gitconfig`, `dot_claude/CLAUDE.md`.
 
-**Merge into, never copy over**, when a file has more than one author. Two
-qualify, and both use a `modify_` script: chezmoi hands it the current target file
+**Merge into, never copy over**, when a file has more than one author. Three
+qualify, and all use a `modify_` script: chezmoi hands it the current target file
 on stdin and takes the new content from stdout, so nothing this repository does
 not own is ever overwritten.
 
@@ -88,6 +89,18 @@ machine is the state `chezmoi apply` meets first: `modify_settings.json.tmpl` pa
 the file through untouched, and `modify_profiles.json.tmpl` does the same unless the
 registry does not exist at all, in which case there is nothing to preserve and it
 emits the declaration directly.
+
+`~/.serena/serena_config.yml` also has two. Serena generates it from its own
+template on first launch, appends to `projects` whenever a project is activated,
+and rewrites the whole file when an upgrade adds a key. This repository owns
+`web_dashboard_open_on_launch`, which stops every Claude Code session from opening
+a browser tab. `modify_private_serena_config.yml.tmpl` rewrites that one line with
+awk - no `yq` is installed, and every key it owns is a top-level scalar - and
+seeds `projects: []` plus its own keys when the file does not exist yet, because
+Serena autogenerates a missing file but crashes on an empty one. Serena's first
+launch then fills in every other key, with the template's comments, exactly as it
+would have for a missing file. The `.tmpl` suffix substitutes nothing; it is what
+puts the script under `check-templates.sh`'s render-and-shellcheck glob.
 
 ### The git identity layer
 

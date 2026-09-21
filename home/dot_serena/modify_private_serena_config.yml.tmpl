@@ -1,0 +1,55 @@
+#!/bin/sh
+#
+# Merge the settings this repository owns into ~/.serena/serena_config.yml.
+#
+# Serena is the MCP server the bdk plugin launches into every Claude Code session.
+# By default it opens its web dashboard in a browser tab each time it starts, which
+# on a machine that runs several sessions a day is a browser tab per session.
+#
+# A `modify_` script receives the current target file on stdin and writes the new
+# content to stdout, so chezmoi never overwrites the file wholesale. That matters
+# here because the file has two authors:
+#
+#   - this repository: `web_dashboard_open_on_launch`
+#   - Serena itself: it generates the file from its template on first launch,
+#     appends to `projects` whenever a project is activated, and rewrites the whole
+#     file when an upgrade adds a key
+#
+# Copying the file into the repository would version Serena's project list and
+# revert every upgrade migration on the next apply. Merging keeps each author's
+# part. No `yq` is installed, so the merge is awk on top-level keys: every key this
+# repository owns is a scalar on its own line, which is all awk has to recognise.
+#
+# The `.tmpl` suffix substitutes nothing. It is there because check-templates.sh
+# renders and shellchecks `modify_*.tmpl`, and a plain script would get neither.
+
+set -eu
+
+current="$(cat)"
+
+# A fresh machine has no file yet, and an empty file is worse than none: Serena
+# autogenerates a missing file from its template but crashes loading an empty one.
+# So seed the minimum Serena accepts - `projects` is the one key it refuses to
+# default - and let its first launch fill in every other key, with the template's
+# comments, the same way it would have for a missing file.
+if [ -z "$current" ]; then
+	cat <<'YAML'
+projects: []
+web_dashboard_open_on_launch: false
+YAML
+	exit 0
+fi
+
+# Rewrite the key in place when Serena's template has already put it there,
+# which keeps the leading comment block that explains it; append it otherwise.
+printf '%s\n' "$current" | awk '
+	/^web_dashboard_open_on_launch:/ {
+		print "web_dashboard_open_on_launch: false"
+		seen = 1
+		next
+	}
+	{ print }
+	END {
+		if (!seen) print "web_dashboard_open_on_launch: false"
+	}
+'

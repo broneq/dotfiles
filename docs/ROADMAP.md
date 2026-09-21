@@ -108,8 +108,9 @@ and `bun` is a hard dependency of the `settings.json` status line
 | `~/.claude/settings.json` | 6.2 KB | **merge script** (`modify_`), 13 of 15 keys |
 | `~/.claude/hooks/herdr-agent-state.sh` | 3.0 KB | **not versioned**, installed by `herdr integration install` |
 | `~/.agents/.skill-lock.json` | 5.2 KB | managed file, drives skill restore |
+| `~/.serena/serena_config.yml` | 13.9 KB | **merge script** (`modify_`), 1 of 33 keys |
 
-Total authored surface: about 21 files, under 60 KB.
+Total authored surface: about 22 files, under 75 KB.
 
 `~/.config/ccstatusline/settings.json` was added on 2026-09-18. It holds the
 whole three-line status line - git root, branch, model, context bar, session and
@@ -844,3 +845,4 @@ half the toolbox. The ordering above exists precisely to prevent that.
 | 2026-09-18 | `50-claude-skills` is plain `run_after_`, with a marker beside each `SKILL.md` deciding what to fetch | `run_onchange_` keys on the script text and knows nothing about the destination: after `rm -rf ~/.claude` it saw nothing to do and thirteen skills stayed unloaded (defect 24). The destination is the only thing that knows whether a skill is present in the version the lock names, so the script asks it on every apply. Same shape as `60-agent-hooks`: an idempotent script that runs every time and does nothing when converged, at the cost of thirteen file reads |
 | 2026-09-18 | `settings.json` merge emits no trailing newline (`jq -j`) | Claude Code writes the file without one. Matching its byte layout is what makes `chezmoi diff` empty after a session, which is phase 2's criterion; the alternative was a one-byte rewrite on every apply and every session, for ever (defect 25) |
 | 2026-09-18 | Phases 0 through 6 closed on real applies, not on the test account | The plan said verification would happen on a dedicated test account. Both real machines have now been applied to, CI runs the same scripts on a clean runner weekly, and a third environment would add a machine to maintain without adding evidence the runner does not already give |
+| 2026-09-19 | `~/.serena/serena_config.yml` merged, not copied, to set `web_dashboard_open_on_launch: false` | Serena opened a browser tab for its dashboard on every Claude Code session, on both machines. The file is Serena's: it generates it, appends every activated project to it and rewrites it on upgrade, so a copy would version the project list and revert each migration. Same shape as `settings.json` and `profiles.json`. The dashboard stays enabled and reachable at `localhost:24282`; only the tab on launch goes. `web_dashboard: false` was rejected because it also removes the log view the dashboard exists for |
