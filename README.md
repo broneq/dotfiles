@@ -131,3 +131,11 @@ Two workflows:
   uv bootstrap and the five hook installers.
 
 Documentation-only edits need `scripts/check.sh` and nothing else.
+
+The other direction - a tool installed or a setting changed on the machine that the
+repository should learn about - is the `/update-dotfiles` skill in Claude Code.
+Its collector runs on its own too and prints one line per drift:
+
+```sh
+bash .claude/skills/update-dotfiles/scripts/drift.sh
+```

@@ -32,6 +32,7 @@ live/                        real files the applications rewrite in place
 scripts/check.sh             mechanical guardrails; needs nothing installed
 scripts/check-templates.sh   renders every template under both profiles, shellchecks it
 scripts/check-negative.sh    plants each violation, asserts the gates catch it
+.claude/skills/update-dotfiles/  the reverse direction: machine to repository
 .github/workflows/test.yml   fast CI, every push
 .github/workflows/install.yml  the fresh-machine test, weekly and on demand
 ```
@@ -329,6 +330,33 @@ it. It is sourced last on purpose, so a local line can override anything the
 repository set. A third file for the includes alone was considered and rejected:
 `.zshrc` is already owned by chezmoi, so a wrapper that only sources two other
 files would add a hop and nothing else.
+
+## The reverse direction
+
+`chezmoi apply` writes the machine from the repository. The
+`/update-dotfiles` skill does the opposite: it finds what changed on the machine
+and, row by row after approval, edits the repository source to match. The
+collector, `.claude/skills/update-dotfiles/scripts/drift.sh`, is read-only and
+knows the four shapes drift takes here:
+
+- **Managed files and templates** come from `chezmoi status`. A plain file is
+  synced with `chezmoi re-add`; a template is edited by hand, because `re-add`
+  skips templates and a snapshot would drop the profile branches.
+- **`modify_` targets are compared semantically, never by `chezmoi diff`.**
+  Claude Code rewrites `settings.json` unsorted, so the raw diff is all key
+  order. The collector sorts both sides, and asks a second question the merge
+  cannot: which entries the machine holds under an owned object key
+  (`enabledPlugins`, `extraKnownMarketplaces`) that the declaration does not
+  list. jq's `*` keeps those, so a plugin enabled through the UI is invisible to
+  every other check. `profiles.json` is exempt from that question on purpose: a
+  profile added on one machine is meant to stay there.
+- **`live/`** needs no copy; the symlinks already put the edit in the tree. The
+  collector lists `git status` for it so the table is complete.
+- **Packages** are compared per channel against `chezmoi data`, the same parse
+  of `packages.yaml` the install scripts render, in both directions. Formulae
+  use `brew list --installed-on-request` rather than `brew leaves`: the leaves
+  set hides `shellcheck` behind `actionlint`, which is the exact case the
+  declaration exists for.
 
 ## Two chezmoi flags that fail silently
 
