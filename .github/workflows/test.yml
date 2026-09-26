@@ -75,7 +75,10 @@ jobs:
                 { "hooks": [{ "type": "command", "command": "echo from-a-tool" }] }
               ]
             },
-            "someOtherTool": { "keepMe": true }
+            "someOtherTool": { "keepMe": true },
+            "extraKnownMarketplaces": {
+              "bdk": { "source": { "source": "directory", "path": "/stale/bdk" } }
+            }
           }
           JSON
           # Same reasoning for the git-identity registry: on an empty HOME the
@@ -147,10 +150,12 @@ jobs:
           [ -z "$(find "$FAKE_HOME/.config" -maxdepth 1 -name 'gh' -o -maxdepth 1 -name 'gh-*')" ] \
             || fail "chezmoi wrote a gh config directory; gh auth login owns those"
 
-          jq -e '.extraKnownMarketplaces.bdk.source.path == $p' \
-            --arg p "$FAKE_HOME/projects/bdk" \
+          # The seed registers bdk as a `directory` source. A marketplace source is
+          # replaced whole, so its `path` must not survive beside the new `url`.
+          jq -e '.extraKnownMarketplaces.bdk.source
+                 == {"source": "git", "url": "https://github.com/broneq/bdk.git"}' \
             "$FAKE_HOME/.claude/settings.json" >/dev/null \
-            || fail "bdk marketplace path was not merged in"
+            || fail "bdk marketplace source was not replaced by the declared git source"
           [ ! -e "$FAKE_HOME/.claude/hooks" ] || fail "chezmoi wrote a hook file; tools own those"
 
           # The .claude directory holds gigabytes of runtime state. Only authored
@@ -362,9 +367,6 @@ jobs:
           [ -d "$FAKE_HOME/.agents/skills/writing-hookify-rules" ] \
             || fail "writing-hookify-rules was renamed by the restore"
 
-          # settings.json registers the marketplace at this path; without the clone
-          # every bdk plugin fails to load with an error that does not name it.
-          [ -d "$FAKE_HOME/projects/bdk/.git" ] || fail "the bdk marketplace was not cloned"
 
   packages:
     name: package names resolve
