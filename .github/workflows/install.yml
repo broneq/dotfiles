@@ -59,7 +59,8 @@ jobs:
           set -euo pipefail
           fake="$(mktemp -d)"
           env HOME="$fake" chezmoi init --source . \
-            --promptChoice "Machine profile=${{ matrix.profile }}" --no-tty
+            --promptChoice "Machine profile=${{ matrix.profile }}" \
+            --promptString "Tunnel SSH target for herdr=me@ssh.example.invalid" --no-tty
           env HOME="$fake" chezmoi apply --no-tty --verbose
           echo "FAKE_HOME=$fake" >>"$GITHUB_ENV"
 

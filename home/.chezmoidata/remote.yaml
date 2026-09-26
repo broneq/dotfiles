@@ -1,0 +1,10 @@
+# herdr on the `managed` machine reaches the `owned` machine through this SSH host
+# alias. The tunnel hostname and the remote user are not here: this repository is
+# public, and both are answered once at `chezmoi init` (see .chezmoi.toml.tmpl).
+#
+# The alias is the SSH target herdr saves, so renaming it after the machine was
+# added leaves herdr pointing at a host that no longer exists. Remove the machine
+# with `herdr machine remove <id>` first, then rename.
+herdr_remote:
+  ssh_alias: owned-mac
+  label: owned

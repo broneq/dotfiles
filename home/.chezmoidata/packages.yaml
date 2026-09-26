@@ -17,6 +17,7 @@ packages:
       - atuin           # shell history; was a standalone install in ~/.atuin
       - bun             # settings.json runs `bunx -y ccstatusline@latest`
       - chezmoi         # this repository's own engine; see README bootstrap
+      - cloudflared     # herdr over SSH between the Macs; client on both, tunnel on owned
       - colima
       - docker
       - docker-buildx
