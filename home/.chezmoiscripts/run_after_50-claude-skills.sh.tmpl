@@ -24,7 +24,6 @@ set -euo pipefail
 
 agents_dir="$HOME/.agents/skills"
 claude_dir="$HOME/.claude/skills"
-bdk_dir="$HOME/projects/bdk"
 failures=0
 
 if ! command -v git >/dev/null 2>&1; then
@@ -95,21 +94,6 @@ install_skill() {
 {{ range $name, $skill := $lock.skills -}}
 install_skill "{{ $skill.sourceUrl }}" "{{ $skill.skillPath }}" "{{ $name | lower | replace " " "-" }}" "{{ $skill.skillFolderHash }}"
 {{ end }}
-# settings.json registers a plugin marketplace at a local directory. Without the
-# clone, every bdk plugin fails to load, with an error that does not name this as
-# the cause. Make the dependency explicit instead.
-#
-# HTTPS, not SSH: the repository is public, and an SSH remote would make a GitHub
-# key an undeclared prerequisite of `chezmoi apply` on a machine that has none yet.
-if [ ! -d "$bdk_dir/.git" ]; then
-	printf 'plugin marketplace %s is missing; cloning\n' "$bdk_dir"
-	mkdir -p "$(dirname "$bdk_dir")"
-	if ! git clone --quiet https://github.com/broneq/bdk.git "$bdk_dir"; then
-		printf 'clone of bdk failed. Clone it by hand and re-run chezmoi apply.\n' >&2
-		failures=$((failures + 1))
-	fi
-fi
-
 if [ "$failures" -gt 0 ]; then
 	printf '%d skill restore step(s) failed.\n' "$failures" >&2
 	exit 1

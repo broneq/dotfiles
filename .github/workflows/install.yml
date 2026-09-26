@@ -114,7 +114,6 @@ jobs:
           fail() { echo "::error::$1"; exit 1; }
           count="$(find "$FAKE_HOME/.agents/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
           [ "$count" -eq 13 ] || fail "expected 13 restored skills, found $count"
-          [ -d "$FAKE_HOME/projects/bdk/.git" ] || fail "the bdk marketplace was not cloned"
 
       # The hooks are the reason `settings.json` is merged rather than copied. This
       # is the only place that proves each tool's installer still exists and still

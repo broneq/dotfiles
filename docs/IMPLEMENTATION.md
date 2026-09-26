@@ -298,14 +298,11 @@ of the script:
    `~/.agents/skills` is repaired on the next apply, and a lock file bump is
    fetched, without either case depending on the script text having changed.
 
-The script is `after_` so it runs once the file tree is in place. It also clones
-`~/projects/bdk` if missing: `settings.json` registers a plugin marketplace at that
-local path, and without it every bdk plugin fails to load with an error that does
-not name the cause. The clone is HTTPS even though the repository is the author's
-own: the repository is public, and an SSH remote would have made a GitHub key an
-undeclared prerequisite of `chezmoi apply` on a machine that has none yet. That
-mattered more than it looks, because this script's failure aborts the apply before
-the hooks script runs.
+The script is `after_` so it runs once the file tree is in place. It clones
+nothing for the plugins: `settings.json` declares the `bdk` marketplace as a
+`git` source over HTTPS, and Claude Code fetches it into its own cache. HTTPS
+because the repository is public, and an SSH URL would make a GitHub key an
+undeclared prerequisite of the first session on a new machine.
 
 Thirteen of the fifteen skills on disk are covered. `create-tasks-workspace` and
 `no-mistakes` have no lock entry and therefore no source; they are documented as
