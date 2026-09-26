@@ -8,12 +8,12 @@
 # exist, the script says what is missing and exits 0, so that an apply on a
 # machine that is not ready yet still converges everything else. Once the SSH
 # probe succeeds, a failing `machine add` is a real error and fails the apply.
-#
+
+set -euo pipefail
+
 # `run_after_`, not `run_onchange_after_`: the rendered text does not change when
 # the Access login happens, so a run_onchange_ script that skipped once would
 # never run again.
-
-set -euo pipefail
 
 # `get`: a machine initialised before the tunnel prompt existed has no such key.
 target={{ get . "tunnel_target" | quote }}
