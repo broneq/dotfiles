@@ -158,6 +158,16 @@ jobs:
               || fail "the herdr SSH alias was rendered on owned"
           fi
 
+          # authorized_keys is merged: the managed key is appended on `owned`
+          # only, and `managed` gets no file from an empty passthrough.
+          if [ "${{ matrix.profile }}" = owned ]; then
+            grep -q ' managed$' "$FAKE_HOME/.ssh/authorized_keys" \
+              || fail "the managed key was not authorized on owned"
+          else
+            [ ! -e "$FAKE_HOME/.ssh/authorized_keys" ] \
+              || fail "authorized_keys was written on managed"
+          fi
+
           # gh owns every GH_CONFIG_DIR. chezmoi creating one would mean a token
           # store, or a file claiming a session that has none, arrived from git.
           [ -z "$(find "$FAKE_HOME/.config" -maxdepth 1 -name 'gh' -o -maxdepth 1 -name 'gh-*')" ] \

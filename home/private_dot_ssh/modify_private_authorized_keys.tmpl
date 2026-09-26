@@ -1,0 +1,32 @@
+#!/bin/sh
+#
+# Authorize the `managed` machine's SSH key on the `owned` machine, and change
+# nothing else.
+#
+# The file is merged, not managed: it may hold keys this repository has never
+# seen, and managing it outright would revoke them on the next apply. The key is
+# matched by its base64 blob, so a line that already carries it under another
+# comment or with options is left as it is. On `managed` the script passes the
+# file through, and a missing file stays missing.
+{{- $key := .herdr_remote.managed_public_key }}
+{{- $parts := splitList " " $key }}
+{{- if lt (len $parts) 2 }}
+{{-   fail (printf "herdr_remote.managed_public_key %q is not \"<type> <base64> [comment]\"" $key) }}
+{{- end }}
+
+set -eu
+
+current="$(mktemp)"
+trap 'rm -f "$current"' EXIT
+cat >"$current"
+cat "$current"
+{{- if eq .profile "owned" }}
+
+if ! grep -qF '{{ index $parts 1 }}' "$current"; then
+	# An authored file may end without a newline; the key must start a line.
+	if [ -s "$current" ] && [ -n "$(tail -c 1 "$current")" ]; then
+		printf '\n'
+	fi
+	printf '%s\n' '{{ $key }}'
+fi
+{{- end }}

@@ -144,10 +144,12 @@ Seven things are deliberately manual. Each one is a decision, not an omission.
    next `chezmoi init`. The answer stays in `~/.config/chezmoi/chezmoi.toml`,
    never in the repository, and `chezmoi apply` then writes the `owned-mac` alias
    to `~/.ssh/config.d/herdr-remote` and adds `Include config.d/*` to
-   `~/.ssh/config` without touching its other entries. Two steps stay manual:
+   `~/.ssh/config` without touching its other entries. On the `owned` machine,
+   `chezmoi apply` appends the `managed` public key, declared in
+   `home/.chezmoidata/remote.yaml`, to `~/.ssh/authorized_keys` and leaves every
+   other key there alone. One step stays manual, on `managed`:
 
-   1. Append the `managed` public key to `~/.ssh/authorized_keys` on `owned`.
-   2. Log in to Cloudflare Access, which opens a browser:
+   1. Log in to Cloudflare Access, which opens a browser:
 
       ```sh
       cloudflared access login https://ssh.example.com
@@ -156,7 +158,8 @@ Seven things are deliberately manual. Each one is a decision, not an omission.
    The next `chezmoi apply` checks that `ssh owned-mac` logs in and runs
    `herdr machine add --label owned owned-mac`; the machine then appears in the
    herdr sidebar. Until both steps are done, apply prints which one is missing and
-   carries on.
+   carries on. The `owned` machine must have been applied at least once since the
+   key was declared.
 
    The Access token expires with the application's session duration. When herdr
    stops reaching the machine, repeat the `cloudflared access login` above. Keep

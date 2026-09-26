@@ -8,3 +8,9 @@
 herdr_remote:
   ssh_alias: owned-mac
   label: owned
+  # The `managed` machine's public key, authorized on `owned` by
+  # private_dot_ssh/modify_private_authorized_keys.tmpl. A public key is not a
+  # secret. The comment is `managed` rather than the key's own, which is the
+  # work email address. Rotating the key leaves the old line in authorized_keys:
+  # remove it there by hand.
+  managed_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHG3zJ7/JpmLn11NUL4p64kjt8oqb6vSHYTXNuIVPlO7 managed

@@ -4,10 +4,11 @@
 #
 # `herdr machine add` has to reach the remote machine over SSH, and that needs
 # two things no apply can supply: a Cloudflare Access login, which opens a
-# browser, and this machine's key in the remote authorized_keys. Until both
-# exist, the script says what is missing and exits 0, so that an apply on a
-# machine that is not ready yet still converges everything else. Once the SSH
-# probe succeeds, a failing `machine add` is a real error and fails the apply.
+# browser, and this machine's key in the remote authorized_keys, which only an
+# apply on the remote machine writes. Until both exist, the script says what is
+# missing and exits 0, so that an apply on a machine that is not ready yet still
+# converges everything else. Once the SSH probe succeeds, a failing `machine add`
+# is a real error and fails the apply.
 
 set -euo pipefail
 
@@ -44,7 +45,7 @@ cloudflared access token -app="https://$host" >/dev/null 2>&1 ||
 	skip "no Cloudflare Access login; run 'cloudflared access login https://$host'"
 
 ssh -o BatchMode=yes -o ConnectTimeout=15 "$alias" true </dev/null ||
-	skip "'ssh $alias' does not log in; add this machine's public key to authorized_keys on $label"
+	skip "'ssh $alias' does not log in; run chezmoi apply on $label, which authorizes this machine's key"
 
 # stdin from /dev/null: setup answers No to replacing an incompatible remote
 # server, which is its default and the only safe answer without a human.

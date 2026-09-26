@@ -29,7 +29,8 @@ home/
   dot_config/symlink_*.tmpl  links pointing back into live/
   dot_config/git-identity/   the `private` profile: registry merge + its gitconfig
   dot_serena/                Serena's user config: merge of the keys this repo owns
-  private_dot_ssh/           Include line merged into ~/.ssh/config; owned aliases in config.d/
+  private_dot_ssh/           Include line merged into ~/.ssh/config; owned aliases in config.d/;
+                             the managed key merged into authorized_keys on owned
 live/                        real files the applications rewrite in place
 scripts/check.sh             mechanical guardrails; needs nothing installed
 scripts/check-templates.sh   renders every template under both profiles, shellchecks it
@@ -112,6 +113,14 @@ takes the first value it finds for each option, and an Include after a `Host` li
 belongs to that host. Every alias this repository owns is a whole file under
 `config.d/`, managed outright. The script substitutes nothing and has no `.tmpl`
 suffix; `check-templates.sh` globs every `modify_*`, suffix or not.
+
+`~/.ssh/authorized_keys` may likewise hold keys added by hand.
+`modify_private_authorized_keys.tmpl` owns one line, the `managed` public key from
+`remote.yaml`, and appends it on `owned` only when the key's base64 blob appears
+nowhere in the file, so a line carrying the same key with options or another
+comment counts as present. On `managed` it passes the input through, and chezmoi
+creates no file from an empty result. The declared key carries the comment
+`managed`, not its own, because the original comment is the work email address.
 
 ### The git identity layer
 
@@ -235,6 +244,7 @@ template is evaluated once at `init`, and the assertion should run on every appl
 | git email | work | personal |
 | formulae | `formulae` | `formulae` + `profile_formulae.owned` |
 | tunnel target prompt, `~/.ssh/config.d/herdr-remote` | yes | no |
+| `managed` public key in `~/.ssh/authorized_keys` | no | yes |
 
 The tunnel target is `user@host` for the `owned` machine behind its Cloudflare
 Tunnel. It is prompted for, not declared, because the repository is public, and
