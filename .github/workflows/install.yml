@@ -104,7 +104,9 @@ jobs:
         run: |
           set -euo pipefail
           fail() { echo "::error::$1"; exit 1; }
-          [ -x "$FAKE_HOME/.local/bin/uv" ] || fail "uv did not bootstrap into the home"
+          # uv is a Homebrew formula, so 10-brew installs it and 40-uv-tools never
+          # reaches its curl bootstrap into ~/.local/bin.
+          command -v uv >/dev/null 2>&1 || fail "uv is not on PATH after 10-brew"
           env HOME="$FAKE_HOME" PATH="$FAKE_HOME/.local/bin:$PATH" uv tool list \
             | grep -q code-review-graph || fail "code-review-graph is not an installed uv tool"
 
