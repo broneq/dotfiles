@@ -358,6 +358,16 @@ knows the four shapes drift takes here:
   set hides `shellcheck` behind `actionlint`, which is the exact case the
   declaration exists for.
 
+A finding the user rejects can be recorded in `~/.config/dotfiles.update`, one
+collector line each, and the collector stops printing it. Matching is on the
+whole line, so `+ installed` and `- declared` of the same package are separate
+entries. Only lines that identify the drift completely are filtered - a package
+or an undeclared `settings.json` entry. A changed file or owned key prints the
+same line whatever its content, so ignoring it would hide every later edit; the
+collector never filters those. The file is per machine and unversioned: each
+profile rejects its own tools, and a list shared between them would hide from
+one machine what the other decided.
+
 ## Two chezmoi flags that fail silently
 
 Both of these were wrong in CI for as long as CI existed, and neither announced

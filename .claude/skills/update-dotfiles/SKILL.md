@@ -21,6 +21,13 @@ It is read-only and prints one finding per line, tab-separated:
 the repository agree; report that and stop. Exit 2 means chezmoi is missing;
 stop with that message.
 
+Findings the user rejected earlier on this machine are not printed. They live in
+`~/.config/dotfiles.update`, one collector line each (`kind`, `item`, `detail`,
+tab-separated; `#` comments and blank lines allowed), and the collector reports
+how many it skipped on stderr. Mention that count under the table. The file
+belongs to the machine, not to the repository: the two profiles reject
+different things, and chezmoi never manages it.
+
 Kinds:
 
 | kind | meaning | where the detail comes from |
@@ -64,10 +71,18 @@ A `+` that is plainly a dependency someone `brew install`ed by hand (`libtiff`,
 `librsvg`) still gets a row. Whether it is a tool is the user's call, not the
 collector's.
 
-Then ask which numbers to apply: all, a list, or none. Do not apply anything
-before an explicit answer.
+Then ask two things: which numbers to apply (all, a list, or none), and which
+of the rest to ignore from now on. Only these rows can be ignored:
 
-**Done when:** the user named the rows to apply.
+- a package row, `+` or `-`
+- a `modify` row ending in `present on machine, not declared`
+
+Every other row carries content that keeps changing under the same line, so an
+ignore entry would hide later edits too. A row neither applied nor ignored
+comes back on the next run. Do not apply or ignore anything before an explicit
+answer.
+
+**Done when:** the user named the rows to apply and the rows to ignore.
 
 ## 3. Apply
 
@@ -82,9 +97,13 @@ Rules that hold for every row:
   or anything under `~/.claude` that is not already managed. These are the
   tools' own output; `CLAUDE.md` in the repository root says why.
 - Package names go into `packages.yaml` only. No script gains a package name.
-- A rejected row that is a real tool ("installed on purpose, not for the
-  repository") is a scope decision; offer one line in the `docs/ROADMAP.md`
-  decisions log. A rejected stray dependency needs nothing.
+- An ignored row is appended to `~/.config/dotfiles.update` as the collector
+  line, verbatim, under a `# <date>` comment, with `printf '%s\t%s\t%s\n'`.
+  Create the file when absent. Never edit or reorder existing lines.
+- An ignored row that is a real tool ("installed on purpose, not for the
+  repository") is also a scope decision; offer one line in the
+  `docs/ROADMAP.md` decisions log. An ignored stray dependency needs nothing
+  more.
 
 After a template edit, `chezmoi diff ~/<item>` must be empty. After a merge
 script edit, re-run the collector: the row must be gone.
@@ -98,7 +117,8 @@ script edit, re-run the collector: the row must be gone.
 bash .claude/skills/update-dotfiles/scripts/drift.sh
 ```
 
-The collector must list only the rows the user declined. When
+The collector must list only the rows the user declined without ignoring, and
+its stderr count must include the rows ignored in this run. When
 `packages.yaml` changed, note that the next `chezmoi apply` re-runs the
 matching install script (`run_onchange_`), which is a no-op for a package that
 is already installed.

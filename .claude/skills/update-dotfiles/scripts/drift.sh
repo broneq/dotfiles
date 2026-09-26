@@ -28,11 +28,30 @@ cd "$repo"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
+# Findings the user rejected on this machine are listed, one collector line
+# each, in $DOTFILES_UPDATE_IGNORE (default ~/.config/dotfiles.update) and are
+# not printed again. Only findings whose line identifies the drift completely
+# can be ignored: a package, or an undeclared settings.json entry. A changed
+# file or owned key never can - its line stays the same while the content keeps
+# changing, so an ignore entry would hide every later edit.
+ignore="${DOTFILES_UPDATE_IGNORE:-$HOME/.config/dotfiles.update}"
+
 found=0
 
 emit() {
 	printf '%s\t%s\t%s\n' "$1" "$2" "$3"
 	found=1
+}
+
+# emit, unless the exact line is in the ignore file. Callers may run in a
+# pipeline subshell, so the count goes to a file rather than a variable.
+emit_ignorable() {
+	line="$(printf '%s\t%s\t%s' "$1" "$2" "$3")"
+	if [ -f "$ignore" ] && grep -Fxq -- "$line" "$ignore"; then
+		printf '%s\n' "$line" >>"$tmp/ignored"
+		return 0
+	fi
+	emit "$1" "$2" "$3"
 }
 
 need() {
@@ -113,7 +132,7 @@ while IFS= read -r src_rel; do
 			' "$target" >"$tmp/extras"
 			while IFS= read -r extra; do
 				[ -n "$extra" ] || continue
-				emit "modify" "$rel" "$extra present on machine, not declared"
+				emit_ignorable "modify" "$rel" "$extra present on machine, not declared"
 			done <"$tmp/extras"
 			;;
 		esac
@@ -148,11 +167,11 @@ compare() {
 	# $1 kind, $2 declared file, $3 installed file (both sorted, unique)
 	comm -13 "$2" "$3" | while IFS= read -r p; do
 		[ -n "$p" ] || continue
-		emit "$1" "$p" "+ installed, not declared"
+		emit_ignorable "$1" "$p" "+ installed, not declared"
 	done
 	comm -23 "$2" "$3" | while IFS= read -r p; do
 		[ -n "$p" ] || continue
-		emit "$1" "$p" "- declared, not installed"
+		emit_ignorable "$1" "$p" "- declared, not installed"
 	done
 }
 
@@ -206,6 +225,9 @@ if need uv; then
 fi
 
 # --- verdict -------------------------------------------------------------------
+if [ -s "$tmp/ignored" ]; then
+	printf '%s ignored as rejected, listed in %s\n' "$(wc -l <"$tmp/ignored" | tr -d ' ')" "$ignore" >&2
+fi
 if [ "$found" -eq 0 ]; then
 	printf 'no drift\n' >&2
 	exit 0
