@@ -11,6 +11,7 @@ packages:
   homebrew:
     # Leaves only: the set `brew leaves` returns, not the full dependency closure.
     # `brew list --formula` returns 134 entries and is not what belongs here.
+    # Installed on both profiles.
     formulae:
       - actionlint
       - atuin           # shell history; was a standalone install in ~/.atuin
@@ -30,18 +31,32 @@ packages:
       - midnight-commander
       - mkcert
       - neovim
+      - nmap
       - nvm
       - pandoc
+      - pnpm
       - poppler
       - python@3.14
       - ripgrep         # snacks grep backend; without it `<leader>s` finds nothing
       - rtk
       - shellcheck      # scripts/check.sh gates on it; was only actionlint's dep
+      - telnet
       - tree
       - uv              # runs 40-uv-tools; the script's curl bootstrap is only a fallback
       - watch
+      - wget
       - whistle
       - yarn
+
+    # Installed on one profile only, in addition to `formulae`. Both keys stay
+    # present, even empty: the Brewfile indexes this map by the profile name.
+    profile_formulae:
+      managed: []
+      owned:
+        - ffmpeg
+        - librsvg
+        - libtiff
+        - yt-dlp
 
     casks:
       # Fonts and other user-level casks unpack into ~/Library and need no appdir
@@ -59,6 +74,7 @@ packages:
     - chrome-devtools-axi
     - gh-axi
     - lavish-axi
+    - openspec
     - quota-axi
     - tasks-axi
 

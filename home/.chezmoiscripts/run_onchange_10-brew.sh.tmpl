@@ -29,6 +29,9 @@ cask_args appdir: "{{ .chezmoi.homeDir }}/Applications"
 {{ range .packages.homebrew.formulae -}}
 brew "{{ . }}"
 {{ end -}}
+{{ range index .packages.homebrew.profile_formulae .profile -}}
+brew "{{ . }}"
+{{ end -}}
 {{ range .packages.homebrew.casks.user_level -}}
 cask "{{ . }}"
 {{ end -}}

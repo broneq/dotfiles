@@ -189,7 +189,7 @@ if need brew; then
 	# `--installed-on-request` is the set a human asked for, dependencies
 	# excluded, which is the meaning of the formulae list. `brew leaves` would
 	# hide `shellcheck` behind `actionlint`; see packages.yaml.
-	declared '.packages.homebrew.formulae' >"$tmp/want"
+	declared '.packages.homebrew.formulae + .packages.homebrew.profile_formulae[.profile]' >"$tmp/want"
 	brew list --formula --installed-on-request 2>/dev/null | sort -u >"$tmp/have"
 	compare_counted "brew formula" "$tmp/want" "$tmp/have"
 

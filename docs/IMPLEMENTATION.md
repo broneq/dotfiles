@@ -223,11 +223,13 @@ template is evaluated once at `init`, and the assertion should run on every appl
 |---|---|---|
 | `cask_args appdir:` in the Brewfile | `~/Applications` | absent |
 | git email | work | personal |
-| formulae | identical | identical |
+| formulae | `formulae` | `formulae` + `profile_formulae.owned` |
 
-The formula list does not split. Four container formulae were the only candidates
-and they are wanted on both machines, so a split would be structure without
-content.
+Most formulae are wanted on both machines and live in `formulae`.
+`profile_formulae` holds the few one profile wants on top, keyed by profile name.
+The Brewfile indexes that map with `.profile`, so both keys must exist even when
+one list is empty; `check-templates.sh` renders both profiles and fails on a
+missing key.
 
 ## Packages
 
