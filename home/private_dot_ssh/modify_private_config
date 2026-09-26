@@ -1,0 +1,27 @@
+#!/bin/sh
+#
+# Make ~/.ssh/config include ~/.ssh/config.d/*, and change nothing else.
+#
+# The file is merged, not managed: the `managed` machine may carry host entries
+# this repository has never seen, and managing the file outright would delete them
+# on the next apply. The host aliases this repository owns live in config.d/,
+# where chezmoi manages each file whole.
+#
+# The Include goes first. ssh applies the first value it finds for each option,
+# and an Include placed after a `Host` line belongs to that host's block.
+
+set -eu
+
+line='Include config.d/*'
+current="$(mktemp)"
+trap 'rm -f "$current"' EXIT
+cat >"$current"
+
+if grep -qxF "$line" "$current"; then
+	cat "$current"
+elif [ -s "$current" ]; then
+	printf '%s\n\n' "$line"
+	cat "$current"
+else
+	printf '%s\n' "$line"
+fi

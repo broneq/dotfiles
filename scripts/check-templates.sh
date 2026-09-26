@@ -24,6 +24,10 @@ cd "$(dirname "$0")/.."
 # finds no TTY, and hands the template the prompt string as the answer.
 PROMPT='Machine profile'
 
+# Only `managed` asks for the tunnel target, and a prompt with no answer and no TTY
+# fails init with EOF. The value is a placeholder: nothing here connects to it.
+TUNNEL_PROMPT='Tunnel SSH target for herdr'
+
 if ! command -v chezmoi >/dev/null 2>&1; then
 	printf 'chezmoi is not installed - "brew install chezmoi"\n' >&2
 	exit 1
@@ -61,6 +65,7 @@ for profile in managed owned; do
 	if ! env HOME="$tmp/home-$profile" chezmoi init \
 		--source "$PWD" \
 		--promptChoice "$PROMPT=$profile" \
+		--promptString "$TUNNEL_PROMPT=me@ssh.example.invalid" \
 		--destination "$tmp/home-$profile" \
 		--config-path "$cfg" \
 		--persistent-state "$tmp/$profile-state.boltdb" \
@@ -81,7 +86,7 @@ for profile in managed owned; do
 	# Globbed, not listed: a `modify_` script that nothing renders is a script that
 	# breaks on the machine and nowhere else. Adding one must not also require
 	# remembering to add it here.
-	for tmpl in home/.chezmoiscripts/*.sh.tmpl home/dot_*/modify_*.tmpl home/dot_*/*/modify_*.tmpl; do
+	for tmpl in home/.chezmoiscripts/*.sh.tmpl home/*dot_*/modify_* home/*dot_*/*/modify_*; do
 		[ -f "$tmpl" ] || continue
 		name="$(basename "${tmpl%.tmpl}")"
 		out="$tmp/$profile-$name"

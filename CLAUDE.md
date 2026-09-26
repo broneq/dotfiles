@@ -120,7 +120,7 @@ symlink, and edits made in either place are the same bytes.
 **chezmoi-managed file or template** when only a human writes it: `~/.zshrc`,
 `~/.zprofile`, `~/.gitconfig`, `~/.claude/CLAUDE.md`.
 
-**Merge, never copy**, when the file has more than one author. Three files
+**Merge, never copy**, when the file has more than one author. Four files
 qualify, and none may ever be `chezmoi add`ed or `re-add`ed:
 
 - `~/.claude/settings.json`, written by Claude Code, by this repository, and by
@@ -138,6 +138,10 @@ qualify, and none may ever be `chezmoi add`ed or `re-add`ed:
   `modify_private_serena_config.yml.tmpl` sets the keys this repository owns and
   leaves the rest alone. A copy would version the project list and revert each
   upgrade migration on the next apply.
+- `~/.ssh/config`, which the `managed` machine may already fill with host entries
+  this repository has never seen. `modify_private_config` owns only the
+  `Include config.d/*` line; the aliases this repository declares are whole files
+  under `~/.ssh/config.d/`.
 
 **A `gh` configuration directory is never versioned.** `~/.config/gh` and
 `~/.config/gh-private` are written by `gh auth login`; the token lives in the login

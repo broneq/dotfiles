@@ -112,7 +112,8 @@ jobs:
         run: |
           set -euo pipefail
           env HOME="$FAKE_HOME" chezmoi init --source . \
-            --promptChoice "Machine profile=${{ matrix.profile }}" --no-tty
+            --promptChoice "Machine profile=${{ matrix.profile }}" \
+            --promptString "Tunnel SSH target for herdr=me@ssh.example.invalid" --no-tty
           env HOME="$FAKE_HOME" chezmoi apply --exclude=scripts --no-tty
 
       - name: Assert init took the answer and recorded the source
@@ -144,6 +145,18 @@ jobs:
                    .config/git-identity/private.gitconfig; do
             [ -f "$FAKE_HOME/$f" ] || fail "$f missing"
           done
+
+          # ~/.ssh/config is merged, so only the Include line is ours. The alias
+          # file exists on `managed` only: `owned` is never asked for a target.
+          head -1 "$FAKE_HOME/.ssh/config" | grep -qxF 'Include config.d/*' \
+            || fail ".ssh/config does not start with the config.d Include"
+          if [ "${{ matrix.profile }}" = managed ]; then
+            grep -q '^Host owned-mac$' "$FAKE_HOME/.ssh/config.d/herdr-remote" \
+              || fail "the herdr SSH alias was not rendered on managed"
+          else
+            [ ! -e "$FAKE_HOME/.ssh/config.d/herdr-remote" ] \
+              || fail "the herdr SSH alias was rendered on owned"
+          fi
 
           # gh owns every GH_CONFIG_DIR. chezmoi creating one would mean a token
           # store, or a file claiming a session that has none, arrived from git.
@@ -263,7 +276,8 @@ jobs:
           if [ "${{ matrix.profile }}" = managed ]; then other=owned; else other=managed; fi
           otherhome="$(mktemp -d)"
           env HOME="$otherhome" chezmoi init --source . \
-            --promptChoice "Machine profile=$other" --no-tty
+            --promptChoice "Machine profile=$other" \
+            --promptString "Tunnel SSH target for herdr=me@ssh.example.invalid" --no-tty
 
           mine="$(grep -E '^[[:space:]]*email' "$FAKE_HOME/.gitconfig")"
           theirs="$(env HOME="$otherhome" chezmoi execute-template \
@@ -324,7 +338,8 @@ jobs:
           set -euo pipefail
           fake="$(mktemp -d)"
           env HOME="$fake" chezmoi init --source . \
-            --promptChoice "Machine profile=managed" --no-tty
+            --promptChoice "Machine profile=managed" \
+            --promptString "Tunnel SSH target for herdr=me@ssh.example.invalid" --no-tty
           env HOME="$fake" chezmoi execute-template \
             <home/.chezmoiscripts/run_after_50-claude-skills.sh.tmpl >"$fake/restore.sh"
           env HOME="$fake" bash "$fake/restore.sh"
@@ -390,7 +405,8 @@ jobs:
           fail() { echo "::error::$1"; exit 1; }
           fake="$(mktemp -d)"
           env HOME="$fake" chezmoi init --source . \
-            --promptChoice "Machine profile=managed" --no-tty
+            --promptChoice "Machine profile=managed" \
+            --promptString "Tunnel SSH target for herdr=me@ssh.example.invalid" --no-tty
 
           names() { env HOME="$fake" chezmoi execute-template; }
 

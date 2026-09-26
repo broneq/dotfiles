@@ -1,0 +1,24 @@
+{{- /*
+The SSH host alias herdr uses to reach the `owned` machine through a Cloudflare
+Tunnel. Rendered only when `chezmoi init` was given a tunnel target, which only
+the `managed` profile is asked for. An empty render means chezmoi writes no file.
+
+`get`, not `.tunnel_target`: a machine initialised before the prompt existed has
+no such key until its next `chezmoi init`, and a missing key is a render error.
+*/ -}}
+{{- $target := get . "tunnel_target" -}}
+{{- if $target -}}
+{{-   $parts := splitList "@" $target -}}
+{{-   if or (ne (len $parts) 2) (not (index $parts 0)) (not (index $parts 1)) -}}
+{{-     fail (printf "tunnel_target %q is not user@host; fix it in ~/.config/chezmoi/chezmoi.toml" $target) -}}
+{{-   end -}}
+# Managed by chezmoi from the dotfiles repository; edits here are overwritten.
+#
+# accept-new: the first connection records the host key without a prompt, so
+# herdr's background connection can make it. A changed key is still refused.
+Host {{ .herdr_remote.ssh_alias }}
+  HostName {{ index $parts 1 }}
+  User {{ index $parts 0 }}
+  ProxyCommand /opt/homebrew/bin/cloudflared access ssh --hostname %h
+  StrictHostKeyChecking accept-new
+{{  end -}}

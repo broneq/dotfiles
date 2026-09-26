@@ -14,9 +14,10 @@ here, the sentence belongs in the roadmap instead.
 ```
 .chezmoiroot                 -> "home": chezmoi's source is home/, not the repo root
 home/
-  .chezmoi.toml.tmpl         profile prompt and sourceDir, evaluated at `chezmoi init`
+  .chezmoi.toml.tmpl         profile and tunnel prompts, sourceDir; evaluated at `chezmoi init`
   .chezmoidata/packages.yaml the only place package names appear
   .chezmoidata/identity.yaml the only place commit addresses appear
+  .chezmoidata/remote.yaml   the SSH alias and label herdr uses for the other machine
   .chezmoiremove             paths chezmoi deletes from the destination
   .chezmoiscripts/           install scripts, never part of the file tree
   dot_zshrc.tmpl             \
@@ -28,6 +29,7 @@ home/
   dot_config/symlink_*.tmpl  links pointing back into live/
   dot_config/git-identity/   the `private` profile: registry merge + its gitconfig
   dot_serena/                Serena's user config: merge of the keys this repo owns
+  private_dot_ssh/           Include line merged into ~/.ssh/config; owned aliases in config.d/
 live/                        real files the applications rewrite in place
 scripts/check.sh             mechanical guardrails; needs nothing installed
 scripts/check-templates.sh   renders every template under both profiles, shellchecks it
@@ -66,7 +68,7 @@ home/dot_config/symlink_nvim.tmpl   ->  {{ .chezmoi.sourceDir }}/../live/nvim
 **chezmoi-managed file or template** when only a human writes it: `.zshrc`,
 `.zprofile`, `.gitconfig`, `dot_claude/CLAUDE.md`.
 
-**Merge into, never copy over**, when a file has more than one author. Three
+**Merge into, never copy over**, when a file has more than one author. Four
 qualify, and all use a `modify_` script: chezmoi hands it the current target file
 on stdin and takes the new content from stdout, so nothing this repository does
 not own is ever overwritten.
@@ -102,6 +104,14 @@ Serena autogenerates a missing file but crashes on an empty one. Serena's first
 launch then fills in every other key, with the template's comments, exactly as it
 would have for a missing file. The `.tmpl` suffix substitutes nothing; it is what
 puts the script under `check-templates.sh`'s render-and-shellcheck glob.
+
+`~/.ssh/config` belongs to whoever set the machine up, and the `managed` machine
+may carry host entries this repository has never seen. `modify_private_config`
+owns exactly one line, `Include config.d/*`, which it puts first when absent: ssh
+takes the first value it finds for each option, and an Include after a `Host` line
+belongs to that host. Every alias this repository owns is a whole file under
+`config.d/`, managed outright. The script substitutes nothing and has no `.tmpl`
+suffix; `check-templates.sh` globs every `modify_*`, suffix or not.
 
 ### The git identity layer
 
@@ -224,6 +234,14 @@ template is evaluated once at `init`, and the assertion should run on every appl
 | `cask_args appdir:` in the Brewfile | `~/Applications` | absent |
 | git email | work | personal |
 | formulae | `formulae` | `formulae` + `profile_formulae.owned` |
+| tunnel target prompt, `~/.ssh/config.d/herdr-remote` | yes | no |
+
+The tunnel target is `user@host` for the `owned` machine behind its Cloudflare
+Tunnel. It is prompted for, not declared, because the repository is public, and
+an empty answer turns the whole connection off. Templates read it with
+`get . "tunnel_target"`: a machine initialised before the prompt existed has no
+such key, and `.tunnel_target` would be a render error there. CI answers the
+prompt with `--promptString`, under the same prompt-text rules as the profile.
 
 Most formulae are wanted on both machines and live in `formulae`.
 `profile_formulae` holds the few one profile wants on top, keyed by profile name.
@@ -258,6 +276,7 @@ Three entries are there for reasons that are not obvious from the list:
 | `run_onchange_40-uv-tools.sh.tmpl` | Bootstraps `uv` if absent; normally `10-brew` has already installed it, since `uv` is a declared formula. The `curl \| sh` in the guarded branch is the only downloaded script in the repository. |
 | `run_after_50-claude-skills.sh.tmpl` | See below. Plain `run_`; the marker beside each `SKILL.md` decides what is fetched. |
 | `run_after_60-agent-hooks.sh.tmpl` | Calls each tool's own hook installer. Plain `run_`, not `run_onchange_`; see "Hooks belong to their tools". |
+| `run_after_70-herdr-remote.sh.tmpl` | Runs `herdr machine add` for the `owned` machine once the SSH alias logs in. Until a Cloudflare Access login and the authorized key exist it says which is missing and exits 0; `cloudflared access token` is the probe because `access ssh` would open a browser and block the apply. Plain `run_`: the Access login changes no rendered text. |
 
 `run_onchange_` re-runs when the script's own text changes. Because the package
 list is templated into the script body, editing `packages.yaml` changes the text

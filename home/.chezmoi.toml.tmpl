@@ -15,6 +15,19 @@ text short and free of both characters; the long explanation lives in README.md.
 {{- $profile := promptChoiceOnce . "profile" "Machine profile" (list "managed" "owned") -}}
 
 {{/*
+Only `managed` connects to the other machine; see "What is not automated" in
+README.md. The answer is `user@host` for the `owned` machine's SSH login and its
+Cloudflare Tunnel hostname, or empty to leave the connection unconfigured. It is
+asked for rather than declared because this repository is public.
+
+The same prompt-text rules as above apply: CI answers it with `--promptString`.
+*/ -}}
+{{- $tunnelTarget := "" -}}
+{{- if eq $profile "managed" -}}
+{{-   $tunnelTarget = promptStringOnce . "tunnel_target" "Tunnel SSH target for herdr" -}}
+{{- end -}}
+
+{{/*
 `chezmoi init --source DIR` does not persist DIR anywhere. Without the line below, a
 later bare `chezmoi apply` falls back to ~/.local/share/chezmoi, finds nothing there
 and silently applies nothing. Record the directory init actually used.
@@ -23,3 +36,4 @@ sourceDir = {{ .chezmoi.sourceDir | quote }}
 
 [data]
     profile = {{ $profile | quote }}
+    tunnel_target = {{ $tunnelTarget | quote }}

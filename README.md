@@ -31,7 +31,10 @@ personal Mac with root. The prompt is deliberately terse - it doubles as the loo
 key CI uses to answer it without a terminal, and a key containing a comma or an `=`
 cannot be matched. The table below is the long form.
 
-The answer, and the source directory `init` was pointed at, are both stored in
+On `managed` it also asks for the herdr tunnel target; see "What is not
+automated", point 7.
+
+The answers, and the source directory `init` was pointed at, are all stored in
 `~/.config/chezmoi/chezmoi.toml`. The second half matters: `chezmoi init --source`
 does not persist that path by itself, so without it the `chezmoi apply` below would
 resolve to `~/.local/share/chezmoi`, find nothing and report success. Then:
@@ -60,7 +63,7 @@ on an account without admin group membership.
 
 ## What is not automated
 
-Six things are deliberately manual. Each one is a decision, not an omission.
+Seven things are deliberately manual. Each one is a decision, not an omission.
 
 1. **Installing chezmoi and Homebrew.** See above.
 2. **The GitHub repository.** CI lives in `.github/workflows/test.yml` and runs
@@ -101,6 +104,64 @@ Six things are deliberately manual. Each one is a decision, not an omission.
    machine that still carries the `curl | sh` copy in `~/.local/bin` must delete
    it by hand: that directory precedes `/opt/homebrew/bin` on `PATH`, so the
    standalone binary would shadow the one Homebrew keeps current.
+7. **Reaching the `owned` machine's herdr from `managed`.** herdr attaches to
+   another machine over SSH only, and the SSH connection runs through a
+   Cloudflare Tunnel with Cloudflare Access in front of it. Every piece of this is
+   either a secret (the tunnel token, the SSH key), a system setting that needs
+   admin (Remote Login), or a Cloudflare dashboard object, so none of it is
+   versioned. `cloudflared` itself is declared in `packages.yaml`.
+
+   Only this direction is set up. The `managed` machine opens an outbound
+   connection and listens on nothing; see the open question in
+   `docs/ROADMAP.md` for the reverse direction.
+
+   On the `owned` machine:
+
+   1. System Settings, General, Sharing: turn on **Remote Login**, allowed for
+      your user only.
+   2. Cloudflare dashboard, Zero Trust, Networks, Tunnels: create a
+      `cloudflared` tunnel and add a public hostname, for example
+      `ssh.example.com`, with service `ssh://localhost:22`.
+   3. Install the connector the dashboard shows. `sudo` here is typed by a human
+      on the machine that has admin rights, not run by a script:
+
+      ```sh
+      sudo cloudflared service install <tunnel-token>
+      ```
+
+   4. Zero Trust, Access, Applications: add a self-hosted application for the
+      same hostname, with a policy that allows only your own email. Without it
+      the SSH port is on the public internet.
+
+   On the `managed` machine, `chezmoi init` asks once for the tunnel target:
+
+   ```
+   Tunnel SSH target for herdr?
+   ```
+
+   Answer `<owned-username>@ssh.example.com`, or leave it empty to skip the whole
+   connection. A machine initialised before this prompt existed gets it on its
+   next `chezmoi init`. The answer stays in `~/.config/chezmoi/chezmoi.toml`,
+   never in the repository, and `chezmoi apply` then writes the `owned-mac` alias
+   to `~/.ssh/config.d/herdr-remote` and adds `Include config.d/*` to
+   `~/.ssh/config` without touching its other entries. Two steps stay manual:
+
+   1. Append the `managed` public key to `~/.ssh/authorized_keys` on `owned`.
+   2. Log in to Cloudflare Access, which opens a browser:
+
+      ```sh
+      cloudflared access login https://ssh.example.com
+      ```
+
+   The next `chezmoi apply` checks that `ssh owned-mac` logs in and runs
+   `herdr machine add --label owned owned-mac`; the machine then appears in the
+   herdr sidebar. Until both steps are done, apply prints which one is missing and
+   carries on.
+
+   The Access token expires with the application's session duration. When herdr
+   stops reaching the machine, repeat the `cloudflared access login` above. Keep
+   herdr on the same version on both machines: remote attach needs API-compatible
+   servers.
 
 ## Verification
 
